@@ -1,7 +1,16 @@
-#0단계 작업, 1~2일차 작업 최소 코드
 from fastapi import FastAPI
 
-app = FastAPI()
+from app.routes import risk_score, events
+
+app = FastAPI(
+    title="Risk Scoring API",
+    description="User behavior risk scoring server",
+    version="1.0.0"
+)
+
+app.include_router(risk_score.router)
+app.include_router(events.router)
+
 
 @app.get("/")
 def health_check():
