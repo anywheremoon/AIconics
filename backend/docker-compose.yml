@@ -1,6 +1,3 @@
-##2단계작업용 일단 제작 기본 틀만 
-version: "3.9"
-
 services:
   api:
     build: .
