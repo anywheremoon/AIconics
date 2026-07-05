@@ -3,6 +3,7 @@ import uvicorn
 
 # DB 관련 import
 from app.database import Base, engine
+from app.models.event_model import Event
 
 # API 라우터
 from app.routes import risk_score, events
@@ -22,7 +23,7 @@ app = FastAPI(
 # 아직 PostgreSQL을 실행하지 않았으므로 주석 처리
 # 3일차 이후 PostgreSQL 연결 후 다시 활성화
 #
-# Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 # ================================
 # Router 등록
