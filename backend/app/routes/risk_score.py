@@ -31,7 +31,7 @@ def create_risk_score(
     # ====================================================
     
     # event_data(Pydantic 객체)를 dict 형태로 변환해서 위험 점수 계산 함수에 전달
-    score = calculate_risk_score(event_data.dict())
+    score = calculate_risk_score(event_data)
 
     # 계산된 점수를 바탕으로 위험 등급 결정
     level = get_risk_level(score)
