@@ -1,17 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List
 
-# ================================
-# 필요한 모듈 import
-# ================================
-
-# Event 테이블(SQLAlchemy 모델)
-from app.models import Event
-
-# 데이터베이스 연결(Session)을 생성하는 함수
 from app.database import get_db
-
+from app.models.event_model import Event
 
 # ================================
 # API Router 생성

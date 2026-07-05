@@ -1,60 +1,51 @@
 from fastapi import FastAPI
 import uvicorn
 
-# ================================
-# 필요한 모듈 import
-# ================================
+# DB 관련 import
+from app.database import Base, engine
 
-# app/routes 폴더에 있는 API 라우터 가져오기
+# API 라우터
 from app.routes import risk_score, events
-
 
 # ================================
 # FastAPI 애플리케이션 생성
 # ================================
-
-# FastAPI 서버 객체 생성
 app = FastAPI(
-    title="Risk Scoring API",                  # Swagger 문서 제목
-    description="User behavior risk scoring server",   # API 설명
-    version="1.0.0"                            # API 버전
+    title="Risk Scoring API",
+    description="User behavior risk scoring server",
+    version="1.0.0"
 )
 
+# ================================
+# DB 테이블 생성
+# ================================
+# 아직 PostgreSQL을 실행하지 않았으므로 주석 처리
+# 3일차 이후 PostgreSQL 연결 후 다시 활성화
+#
+# Base.metadata.create_all(bind=engine)
 
 # ================================
-# 라우터(Router) 등록
+# Router 등록
 # ================================
-
-# risk_score.py에 정의된 API 등록
 app.include_router(risk_score.router)
-
-# events.py에 정의된 API 등록
 app.include_router(events.router)
 
-
 # ================================
-# 서버 상태 확인(Health Check) API
+# Health Check
 # ================================
-
-# GET /
 @app.get("/")
 def health_check():
     return {
         "message": "Risk API server is running"
     }
 
-
 # ================================
 # 프로그램 실행
 # ================================
-
-# 이 파일을 직접 실행했을 때만 서버 실행
 if __name__ == "__main__":
-
-    # Uvicorn 서버 실행
     uvicorn.run(
-        "main:app",        # main.py 안의 app 객체 실행
-        host="127.0.0.1",  # localhost에서만 접속 가능
-        port=8000,         # 8000번 포트 사용
-        reload=True        # 코드 수정 시 서버 자동 재시작(개발용)
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True
     )

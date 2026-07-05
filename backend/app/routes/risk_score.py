@@ -1,22 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-# ================================
-# 필요한 모듈 import
-# ================================
+from app.schemas.event_schema import EventCreate
+from app.schemas.risk_score_schema import RiskScoreResponse
 
-# 요청(Request)과 응답(Response)에 사용할 Pydantic 스키마
-from app.schemas import EventCreate, RiskScoreResponse
+from app.models.event_model import Event
 
-# DB에 저장할 SQLAlchemy 모델
-from app.models import Event
-
-# 데이터베이스 세션을 가져오는 함수
 from app.database import get_db
 
-# 위험 점수 계산 함수와 위험 등급 판별 함수
-from app.services import calculate_risk_score, get_risk_level
-
+from app.services.risk_engine import calculate_risk_score, get_risk_level
 
 # ================================
 # API Router 생성
