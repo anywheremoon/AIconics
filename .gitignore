@@ -14,8 +14,3 @@ backend/.env
 
 # macOS
 .DS_Store
-
-# PyInstaller
-dist/
-build/
-*.spec
