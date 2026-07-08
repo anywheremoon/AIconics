@@ -1,3 +1,4 @@
+import json
 import threading
 
 # 설정 파일
@@ -87,6 +88,9 @@ def main():
         )
 
         print("JSON 생성 완료")
+
+        # 생성된 JSON 보기 좋게 출력
+        print(json.dumps(event, indent=4, ensure_ascii=False))
 
         # API 전송
         send_event(event)
