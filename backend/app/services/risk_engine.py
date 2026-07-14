@@ -2,10 +2,6 @@ from app.services.ml_engine import detect_anomaly
 
 
 def calculate_risk_score(event_data):
-    """
-    규칙 기반 점수와 ML 이상 탐지 결과를 이용하여
-    최종 리스크 점수를 계산한다.
-    """
 
     score = 0
 
@@ -29,17 +25,25 @@ def calculate_risk_score(event_data):
     if event_data.click_count > 100:
         score += 10
 
-    # Pydantic 객체를 딕셔너리로 변환
+    # Pydantic 객체 → dict
     event_dict = event_data.model_dump()
 
+    # ==========================
     # ML 이상 탐지
+    # ==========================
     ml_result = detect_anomaly(event_dict)
 
-    # One-Class SVM이 이상으로 판단하면 +30점
+    print("ML 결과:", ml_result)
+    print("ML 반영 전 점수:", score)
+
     if ml_result["is_anomaly"]:
         score += 30
 
-    # 최종 점수는 100점을 넘지 않게 제한
+    print("ML 반영 후 점수:", score)
+
+    # ==========================
+    # 최종 점수
+    # ==========================
     final_score = min(score, 100)
 
     return {
@@ -52,14 +56,8 @@ def calculate_risk_score(event_data):
 
 
 def get_risk_level(score):
-    """
-    리스크 점수를 위험 등급으로 변환한다.
-    """
-
     if score >= 70:
         return "HIGH"
-
     elif score >= 40:
         return "MEDIUM"
-
     return "LOW"
