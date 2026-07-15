@@ -1,6 +1,7 @@
 from pathlib import Path
 import joblib
 import numpy as np
+import pandas as pd
 
 
 # 현재 파일:
@@ -60,13 +61,24 @@ class AnomalyDetector:
             raise ValueError("입력된 Feature가 없습니다.")
 
         # 모델은 2차원 형태를 요구함
-        feature_array = np.array(
+        feature_names = list(getattr(self.scaler, "feature_names_in_", []))
+        if feature_names and len(features) != len(feature_names):
+            raise ValueError(
+                f"Expected {len(feature_names)} ML features, received {len(features)}."
+            )
+
+        feature_array = np.asarray(
             features,
             dtype=float
         ).reshape(1, -1)
+        model_input = (
+            pd.DataFrame(feature_array, columns=feature_names)
+            if feature_names
+            else feature_array
+        )
 
         # 학습할 때 사용한 Scaler 적용
-        scaled_features = self.scaler.transform(feature_array)
+        scaled_features = self.scaler.transform(model_input)
 
         # 정상 1, 이상 -1
         prediction = int(
