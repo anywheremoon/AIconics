@@ -19,3 +19,10 @@ backend/.env
 dist/
 build/
 *.spec
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Generic node
+node_modules/
