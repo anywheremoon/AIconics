@@ -6,8 +6,13 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Inside Compose, "localhost" is the API container itself. Use the
+      # PostgreSQL service name so Docker DNS resolves the database correctly.
+      DATABASE_URL: postgresql+psycopg2://risk_user:risk_password@postgres:5432/risk_db
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:16
@@ -20,6 +25,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U risk_user -d risk_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
 volumes:
   postgres_data:

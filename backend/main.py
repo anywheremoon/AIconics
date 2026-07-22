@@ -1,5 +1,11 @@
+import logging
+
 from fastapi import FastAPI
 import uvicorn
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
+from starlette import status
+from fastapi import HTTPException
 
 # DB 관련 import
 from app.database import Base, engine
@@ -23,7 +29,16 @@ app = FastAPI(
 # 아직 PostgreSQL을 실행하지 않았으므로 주석 처리
 # 3일차 이후 PostgreSQL 연결 후 다시 활성화
 #
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+def initialize_database():
+    """Create tables when PostgreSQL is available."""
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError as error:
+        logger.warning("Database is unavailable; tables were not initialized: %s", error)
 
 # ================================
 # Router 등록
@@ -36,9 +51,16 @@ app.include_router(events.router)
 # ================================
 @app.get("/")
 def health_check():
-    return {
-        "message": "Risk API server is running"
-    }
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PostgreSQL is unavailable. Start the database and verify DATABASE_URL.",
+        ) from error
+
+    return {"message": "Risk API server is running", "database": "connected"}
 
 # ================================
 # 프로그램 실행
