@@ -48,3 +48,9 @@ export function getEventLogs() {
 export function getSuspiciousUsers() {
   return request("/api/suspicious-users");
 }
+
+export function deleteEventLog(eventId) {
+  return request(`/api/events/${eventId}`, {
+    method: "DELETE",
+  });
+}

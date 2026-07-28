@@ -23,6 +23,7 @@ build/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.vite/
 
 # Generic node
 node_modules/
