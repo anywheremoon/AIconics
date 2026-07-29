@@ -1,12 +1,10 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Always resolve the backend's .env from this file's location.  The previous
-# call relied on the process working directory, so starting the API from the
-# repository root left DATABASE_URL unset.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL")

@@ -1,6 +1,18 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+//C 테스트용으로 임시로 제작함
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+    plugins: [react()],
+
+    server: {
+        port: 5173,
+
+        proxy: {
+            '/api': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+            },
+        },
+    },
 });

@@ -13,11 +13,7 @@ def create_event(behavior_data, device_data, timestamp):
         "location": config.LOCATION,
         "timestamp": timestamp,
 
-        "typing_speed": behavior_data.get("typing_speed", 0.0),
-        "avg_hold_time": behavior_data.get("avg_hold_time", 0.0),
-        "avg_flight_time": behavior_data.get("avg_flight_time", 0.0),
-        "total_keystrokes": behavior_data.get("total_keystrokes", 0),
-
+        "typing_speed": behavior_data.get("typing_speed", 0),
         "mouse_move_count": behavior_data.get("mouse_move_count", 0),
         "click_count": behavior_data.get("click_count", 0),
 
