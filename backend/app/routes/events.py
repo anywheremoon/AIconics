@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -39,3 +39,31 @@ def get_suspicious_users(db: Session = Depends(get_db)):
 
     # 위험 사용자 목록 반환
     return suspicious
+
+# ====================================================
+# 특정 행동 로그 삭제 API
+# ====================================================
+@router.delete("/events/{event_id}")
+def delete_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+):
+    event = (
+        db.query(Event)
+        .filter(Event.id == event_id)
+        .first()
+    )
+
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail="해당 행동 로그를 찾을 수 없습니다.",
+        )
+
+    db.delete(event)
+    db.commit()
+
+    return {
+        "message": "행동 로그가 삭제되었습니다.",
+        "event_id": event_id,
+    }

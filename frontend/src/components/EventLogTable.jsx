@@ -1,5 +1,5 @@
 /**
- * ISO 형식의 시간을 한국 형식으로 변환한다.
+ * ISO 형식 시간을 한국식 날짜·시간으로 변환한다.
  */
 function formatDateTime(value) {
   if (!value) {
@@ -22,26 +22,28 @@ function formatDateTime(value) {
   });
 }
 
-
 /**
  * 백엔드 위험 등급을 화면용 한글로 변환한다.
  */
 function getRiskLevelLabel(level) {
+  const normalizedLevel = String(level ?? "").toUpperCase();
+
   const riskLevelLabels = {
     LOW: "정상",
     MEDIUM: "주의",
     HIGH: "위험",
   };
 
-  return riskLevelLabels[level] ?? level ?? "-";
+  return riskLevelLabels[normalizedLevel] ?? level ?? "-";
 }
 
-
 /**
- * 위험 등급에 사용할 CSS 클래스명을 반환한다.
+ * 위험 등급에 맞는 CSS 클래스명을 반환한다.
  */
 function getRiskLevelClass(level) {
-  switch (level) {
+  const normalizedLevel = String(level ?? "").toUpperCase();
+
+  switch (normalizedLevel) {
     case "HIGH":
       return "risk-badge-high";
 
@@ -56,11 +58,12 @@ function getRiskLevelClass(level) {
   }
 }
 
-
 export default function EventLogTable({
   logs = [],
   loading = false,
   onRowSelect,
+  onDelete,
+  deletingId = null,
 }) {
   if (loading) {
     return (
@@ -97,56 +100,32 @@ export default function EventLogTable({
             <th>새 기기</th>
             <th>리스크 점수</th>
             <th>위험 등급</th>
+            <th>관리</th>
           </tr>
         </thead>
 
         <tbody>
-          {logs.map((log, index) => {
-            /*
-             * id가 존재하면 id를 key로 사용한다.
-             * id가 없다면 user_id, created_at, index를 조합한다.
-             */
-            const rowKey =
-              log.id ??
-              `${log.user_id}-${log.created_at}-${index}`;
+          {logs.map((log) => {
+            const eventId = log.id;
 
             return (
               <tr
-                key={rowKey}
-                className={
-                  onRowSelect ? "clickable-row" : ""
-                }
+                key={eventId}
                 onClick={() => onRowSelect?.(log)}
               >
                 <td>{formatDateTime(log.created_at)}</td>
-
                 <td>{log.user_id ?? "-"}</td>
-
                 <td>{log.device_id ?? "-"}</td>
-
                 <td>{log.ip_address ?? "-"}</td>
-
                 <td>{log.location ?? "-"}</td>
-
                 <td>{log.typing_speed ?? "-"}</td>
-
                 <td>{log.avg_hold_time ?? "-"}</td>
-
                 <td>{log.avg_flight_time ?? "-"}</td>
-
                 <td>{log.total_keystrokes ?? "-"}</td>
-
                 <td>{log.mouse_move_count ?? "-"}</td>
-
                 <td>{log.click_count ?? "-"}</td>
-
-                <td>
-                  {log.is_new_device ? "예" : "아니오"}
-                </td>
-
-                <td>
-                  <strong>{log.risk_score ?? "-"}</strong>
-                </td>
+                <td>{log.is_new_device ? "예" : "아니오"}</td>
+                <td>{log.risk_score ?? "-"}</td>
 
                 <td>
                   <span
@@ -156,6 +135,22 @@ export default function EventLogTable({
                   >
                     {getRiskLevelLabel(log.risk_level)}
                   </span>
+                </td>
+
+                <td>
+                  <button
+                    type="button"
+                    className="delete-button"
+                    disabled={deletingId === eventId}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDelete?.(log);
+                    }}
+                  >
+                    {deletingId === eventId
+                      ? "삭제 중..."
+                      : "삭제"}
+                  </button>
                 </td>
               </tr>
             );
