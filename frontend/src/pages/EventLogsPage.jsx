@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getEventLogs } from "../api/riskApi";
+import {
+  deleteEventLog,
+  getEventLogs,
+} from "../api/riskApi";
 import EventLogTable from "../components/EventLogTable";
-
 
 const INITIAL_FILTERS = {
   userId: "",
@@ -11,27 +13,18 @@ const INITIAL_FILTERS = {
   endDate: "",
 };
 
-
 export default function EventLogsPage() {
   const [logs, setLogs] = useState([]);
-
-  /*
-   * 입력창에 현재 입력 중인 검색 조건
-   */
   const [filters, setFilters] = useState(INITIAL_FILTERS);
-
-  /*
-   * 조회 버튼을 눌렀을 때 실제로 적용되는 검색 조건
-   */
   const [appliedFilters, setAppliedFilters] =
     useState(INITIAL_FILTERS);
 
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
 
-
   /**
-   * 백엔드에서 행동 로그 전체를 불러온다.
+   * 백엔드에서 행동 로그 전체 조회
    */
   async function loadLogs() {
     setLoading(true);
@@ -40,26 +33,15 @@ export default function EventLogsPage() {
     try {
       const data = await getEventLogs();
 
-      /*
-       * 현재 백엔드는 배열을 그대로 반환한다.
-       * 예상 형식:
-       * [
-       *   {
-       *     id: 1,
-       *     user_id: "user01",
-       *     ...
-       *   }
-       * ]
-       */
       if (Array.isArray(data)) {
         setLogs(data);
       } else {
         setLogs([]);
-        setError(
-          "행동 로그 응답 형식이 올바르지 않습니다."
-        );
+        setError("행동 로그 응답 형식이 올바르지 않습니다.");
       }
     } catch (requestError) {
+      console.error("행동 로그 조회 실패:", requestError);
+
       setLogs([]);
       setError(
         requestError.message ??
@@ -70,20 +52,15 @@ export default function EventLogsPage() {
     }
   }
 
-
   /**
-   * 페이지가 처음 열릴 때 로그를 자동으로 조회한다.
+   * 페이지 최초 진입 시 로그 조회
    */
   useEffect(() => {
     loadLogs();
   }, []);
 
-
   /**
-   * 조회된 전체 데이터를 조건에 맞게 필터링한다.
-   *
-   * 현재 백엔드 /api/events가 쿼리 파라미터 검색을
-   * 지원하지 않으므로 React에서 필터링한다.
+   * 검색 조건에 맞춰 로그 필터링 및 최신순 정렬
    */
   const filteredLogs = useMemo(() => {
     return logs
@@ -92,10 +69,9 @@ export default function EventLogsPage() {
           log.user_id ?? ""
         ).toLowerCase();
 
-        const searchUserId =
-          appliedFilters.userId
-            .trim()
-            .toLowerCase();
+        const searchUserId = appliedFilters.userId
+          .trim()
+          .toLowerCase();
 
         const matchesUserId =
           searchUserId === "" ||
@@ -147,16 +123,12 @@ export default function EventLogsPage() {
           secondLog.created_at ?? 0
         ).getTime();
 
-        /*
-         * 최신 로그가 위에 표시되도록 내림차순 정렬
-         */
         return secondTime - firstTime;
       });
   }, [logs, appliedFilters]);
 
-
   /**
-   * 검색 입력값 변경 처리
+   * 검색 입력값 변경
    */
   function handleFilterChange(event) {
     const { name, value } = event.target;
@@ -167,9 +139,8 @@ export default function EventLogsPage() {
     }));
   }
 
-
   /**
-   * 조회 버튼 클릭 처리
+   * 검색 적용
    */
   function handleSearch(event) {
     event.preventDefault();
@@ -189,7 +160,6 @@ export default function EventLogsPage() {
     setAppliedFilters(filters);
   }
 
-
   /**
    * 검색 조건 초기화
    */
@@ -199,14 +169,47 @@ export default function EventLogsPage() {
     setError("");
   }
 
-
   /**
-   * 테이블 행 클릭 처리
+   * 테이블 행 클릭
    */
   function handleRowSelect(log) {
     console.log("선택한 행동 로그:", log);
   }
 
+  /**
+   * 특정 행동 로그 삭제
+   */
+  async function handleDelete(log) {
+    const confirmed = window.confirm(
+      `${log.user_id ?? "선택한 사용자"}의 행동 로그를 삭제하시겠습니까?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(log.id);
+    setError("");
+
+    try {
+      await deleteEventLog(log.id);
+
+      setLogs((previousLogs) =>
+        previousLogs.filter(
+          (previousLog) => previousLog.id !== log.id
+        )
+      );
+    } catch (deleteError) {
+      console.error("행동 로그 삭제 실패:", deleteError);
+
+      setError(
+        deleteError.message ??
+          "행동 로그를 삭제하지 못했습니다."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <main className="page-container">
@@ -232,7 +235,6 @@ export default function EventLogsPage() {
         </button>
       </div>
 
-
       <form
         className="filter-form"
         onSubmit={handleSearch}
@@ -249,7 +251,6 @@ export default function EventLogsPage() {
           />
         </label>
 
-
         <label className="filter-field">
           <span>위험 등급</span>
 
@@ -265,7 +266,6 @@ export default function EventLogsPage() {
           </select>
         </label>
 
-
         <label className="filter-field">
           <span>시작 날짜</span>
 
@@ -277,7 +277,6 @@ export default function EventLogsPage() {
           />
         </label>
 
-
         <label className="filter-field">
           <span>종료 날짜</span>
 
@@ -288,7 +287,6 @@ export default function EventLogsPage() {
             onChange={handleFilterChange}
           />
         </label>
-
 
         <div className="filter-actions">
           <button
@@ -308,7 +306,6 @@ export default function EventLogsPage() {
         </div>
       </form>
 
-
       <div className="result-summary">
         <span>
           전체 로그: <strong>{logs.length}</strong>건
@@ -320,16 +317,16 @@ export default function EventLogsPage() {
         </span>
       </div>
 
-
       {error && (
         <p className="error-message">{error}</p>
       )}
-
 
       <EventLogTable
         logs={filteredLogs}
         loading={loading}
         onRowSelect={handleRowSelect}
+        onDelete={handleDelete}
+        deletingId={deletingId}
       />
     </main>
   );
