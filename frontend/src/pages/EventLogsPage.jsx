@@ -211,123 +211,124 @@ export default function EventLogsPage() {
     }
   }
 
-  return (
+    return (
     <main className="page-container">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">
-            행동 로그 조회
-          </h1>
+      <section className="page-card">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">행동 로그 조회</h1>
 
-          <p className="page-description">
-            수집된 사용자 행동 데이터와 계산된 위험도를
-            확인합니다.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          className="action-button"
-          onClick={loadLogs}
-          disabled={loading}
-        >
-          {loading ? "불러오는 중..." : "새로고침"}
-        </button>
-      </div>
-
-      <form
-        className="filter-form"
-        onSubmit={handleSearch}
-      >
-        <label className="filter-field">
-          <span>사용자 ID</span>
-
-          <input
-            type="text"
-            name="userId"
-            value={filters.userId}
-            onChange={handleFilterChange}
-            placeholder="예: user01"
-          />
-        </label>
-
-        <label className="filter-field">
-          <span>위험 등급</span>
-
-          <select
-            name="riskLevel"
-            value={filters.riskLevel}
-            onChange={handleFilterChange}
-          >
-            <option value="all">전체</option>
-            <option value="LOW">정상</option>
-            <option value="MEDIUM">주의</option>
-            <option value="HIGH">위험</option>
-          </select>
-        </label>
-
-        <label className="filter-field">
-          <span>시작 날짜</span>
-
-          <input
-            type="date"
-            name="startDate"
-            value={filters.startDate}
-            onChange={handleFilterChange}
-          />
-        </label>
-
-        <label className="filter-field">
-          <span>종료 날짜</span>
-
-          <input
-            type="date"
-            name="endDate"
-            value={filters.endDate}
-            onChange={handleFilterChange}
-          />
-        </label>
-
-        <div className="filter-actions">
-          <button
-            type="submit"
-            className="action-button"
-          >
-            조회
-          </button>
+            <p className="page-description">
+              수집된 사용자 행동 데이터와 계산된 위험도를
+              확인합니다.
+            </p>
+          </div>
 
           <button
             type="button"
-            className="secondary-button"
-            onClick={handleReset}
+            className="action-button"
+            onClick={loadLogs}
+            disabled={loading}
           >
-            초기화
+            {loading ? "불러오는 중..." : "새로고침"}
           </button>
         </div>
-      </form>
 
-      <div className="result-summary">
-        <span>
-          전체 로그: <strong>{logs.length}</strong>건
-        </span>
+        <form
+          className="event-filter-card"
+          onSubmit={handleSearch}
+        >
+          <label className="filter-field event-user-filter">
+            <span>사용자 ID</span>
 
-        <span>
-          조회 결과:{" "}
-          <strong>{filteredLogs.length}</strong>건
-        </span>
-      </div>
+            <input
+              type="text"
+              name="userId"
+              value={filters.userId}
+              onChange={handleFilterChange}
+              placeholder="예: user01"
+            />
+          </label>
 
-      {error && (
-        <p className="error-message">{error}</p>
-      )}
+          <label className="filter-field">
+            <span>위험 등급</span>
 
-      <EventLogTable
-        logs={filteredLogs}
-        loading={loading}
-        onRowSelect={handleRowSelect}
-        onDelete={handleDelete}
-        deletingId={deletingId}
-      />
+            <select
+              name="riskLevel"
+              value={filters.riskLevel}
+              onChange={handleFilterChange}
+            >
+              <option value="all">전체</option>
+              <option value="LOW">정상</option>
+              <option value="MEDIUM">주의</option>
+              <option value="HIGH">위험</option>
+            </select>
+          </label>
+
+          <label className="filter-field">
+            <span>시작 날짜</span>
+
+            <input
+              type="date"
+              name="startDate"
+              value={filters.startDate}
+              onChange={handleFilterChange}
+            />
+          </label>
+
+          <label className="filter-field">
+            <span>종료 날짜</span>
+
+            <input
+              type="date"
+              name="endDate"
+              value={filters.endDate}
+              onChange={handleFilterChange}
+            />
+          </label>
+
+          <div className="event-filter-actions">
+            <button
+              type="submit"
+              className="action-button"
+            >
+              조회
+            </button>
+
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleReset}
+            >
+              초기화
+            </button>
+          </div>
+        </form>
+
+        <div className="result-summary event-result-summary">
+          <span>
+            전체 로그
+            <strong>{logs.length}</strong>건
+          </span>
+
+          <span>
+            조회 결과
+            <strong>{filteredLogs.length}</strong>건
+          </span>
+        </div>
+
+        {error && (
+          <p className="error-message">{error}</p>
+        )}
+
+        <EventLogTable
+          logs={filteredLogs}
+          loading={loading}
+          onRowSelect={handleRowSelect}
+          onDelete={handleDelete}
+          deletingId={deletingId}
+        />
+      </section>
     </main>
   );
 }
