@@ -26,7 +26,7 @@ function getRiskLabel(level) {
   return "정상";
 }
 
-function SuspiciousUserTable({ users, onUserSelect }) {
+function SuspiciousUserTable({ users }) {
   if (!users || users.length === 0) {
     return <p className="empty-message">의심 사용자가 없습니다.</p>;
   }
@@ -41,7 +41,6 @@ function SuspiciousUserTable({ users, onUserSelect }) {
             <th>리스크 점수</th>
             <th>위험 등급</th>
             <th>최근 탐지 시간</th>
-            <th>상세 보기</th>
           </tr>
         </thead>
 
@@ -60,15 +59,6 @@ function SuspiciousUserTable({ users, onUserSelect }) {
                   </span>
                 </td>
                 <td>{formatDateTime(user.lastDetectedAt)}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="action-button"
-                    onClick={() => onUserSelect?.(user)}
-                  >
-                    로그 보기
-                  </button>
-                </td>
               </tr>
             );
           })}
