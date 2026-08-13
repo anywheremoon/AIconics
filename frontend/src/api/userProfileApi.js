@@ -1,7 +1,7 @@
-//임시로 제작 B
+//사용자 초기 프로필 조회 
 const API_BASE_URL = "http://localhost:8000";
 
-export async function getMyAccount() {
+export async function getMyUserProfile() {
   const token = localStorage.getItem("access_token");
 
   if (!token) {
@@ -9,7 +9,7 @@ export async function getMyAccount() {
   }
 
   const response = await fetch(
-    `${API_BASE_URL}/api/accounts/me`,
+    `${API_BASE_URL}/api/user-profiles/me`,
     {
       headers: {
         Accept: "application/json",
@@ -27,7 +27,7 @@ export async function getMyAccount() {
 
   if (!response.ok) {
     throw new Error(
-      data?.detail || "계좌 조회에 실패했습니다."
+      data?.detail || "사용자 프로필 조회에 실패했습니다."
     );
   }
 

@@ -12,7 +12,7 @@ from app.database import Base, engine
 from app.models.event_model import Event
 
 # API 라우터
-from app.routes import risk_score, events
+from app.routes import accounts, auth, events, risk_score, transactions, user_profiles
 
 
 # ================================
@@ -61,6 +61,10 @@ def initialize_database():
 # ================================
 # Router 등록
 # ================================
+app.include_router(auth.router)
+app.include_router(user_profiles.router)
+app.include_router(accounts.router)
+app.include_router(transactions.router)
 app.include_router(risk_score.router)
 app.include_router(events.router)
 

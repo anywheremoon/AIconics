@@ -45,5 +45,5 @@ export async function login(data, deviceId = null) {
     headers: deviceId ? { "X-Device-ID": deviceId } : {},
     body: JSON.stringify(data),
   });
-  return result.access_token;
+  return result;
 }
