@@ -191,4 +191,12 @@ def login_user(
         )
     token = create_access_token(user.id)
     _save_login_history(db, user.id, device_id, ip_address, True)
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        },
+    }

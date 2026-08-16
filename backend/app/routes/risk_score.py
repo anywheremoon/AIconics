@@ -8,6 +8,7 @@ from app.models.event_model import Event
 from app.database import get_db
 
 from app.services.risk_engine import calculate_risk_score
+from app.services.auth_service import get_current_user
 
 
 # ================================
@@ -15,7 +16,8 @@ from app.services.risk_engine import calculate_risk_score
 # ================================
 router = APIRouter(
     prefix="/api",
-    tags=["Risk Score"]
+    tags=["Risk Score"],
+    dependencies=[Depends(get_current_user)],
 )
 
 

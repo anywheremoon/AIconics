@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +24,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class AuthenticatedUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    role: Literal["USER", "ADMIN"]
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: AuthenticatedUserResponse

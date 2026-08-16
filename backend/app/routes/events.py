@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies.auth_dependency import require_admin
 from app.models.event_model import Event
 
 # ================================
@@ -9,7 +10,8 @@ from app.models.event_model import Event
 # ================================
 router = APIRouter(
     prefix="/api",      # 모든 API 주소 앞에 /api가 붙음
-    tags=["Events"]     # Swagger 문서에서 "Events" 그룹으로 표시
+    tags=["Events"],    # Swagger 문서에서 "Events" 그룹으로 표시
+    dependencies=[Depends(require_admin)],
 )
 
 # ====================================================
