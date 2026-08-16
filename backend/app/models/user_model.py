@@ -10,4 +10,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
+    role = Column(
+        String(10),
+        nullable=False,
+        default="USER",
+        server_default="USER",
+    )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -12,8 +12,22 @@ def find_by_id(db: Session, user_id: int) -> User | None:
 
 
 def create_user(db: Session, username: str, password_hash: str) -> User:
-    user = User(username=username, password_hash=password_hash)
+    user = User(
+        username=username,
+        password_hash=password_hash,
+        role="USER",
+    )
     db.add(user)
+    db.flush()
+    db.refresh(user)
+    return user
+
+
+def update_role(db: Session, user: User, role: str) -> User:
+    if role not in {"USER", "ADMIN"}:
+        raise ValueError("Invalid user role")
+
+    user.role = role
     db.flush()
     db.refresh(user)
     return user
