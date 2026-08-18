@@ -1,107 +1,187 @@
 //계좌 화면 구현
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getMyAccount } from "../api/accountApi.js";
-import { getTransactions } from "../api/transactionApi.js";
-
-import AccountCard from "../components/AccountCard.jsx";
-import TransactionHistoryTable from "../components/TransactionHistoryTable.jsx";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 function AccountPage() {
   const navigate = useNavigate();
 
-  const [account, setAccount] = useState(null);
-  const [transactions, setTransactions] = useState([]);
+  const { user, logout } = useAuth();
 
+  const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const [accountData, transactionData] =
-        await Promise.all([
-          getMyAccount(),
-          getTransactions(),
-        ]);
-
-      setAccount(accountData);
-
-      setTransactions(
-        Array.isArray(transactionData)
-          ? transactionData
-          : transactionData?.transactions || []
-      );
-    } catch (err) {
-      setError(err.message || "계좌 조회에 실패했습니다.");
-
-      if (
-        err.message?.includes("로그인") ||
-        err.message?.includes("만료")
-      ) {
-        navigate("/login");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate]);
-
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) {
-      navigate("/login");
-      return;
+    let cancelled = false;
+
+    async function loadAccount() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await getMyAccount();
+
+        if (!cancelled) {
+          setAccount(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setAccount(null);
+
+          setError(
+            err.message ||
+              "계좌 정보를 불러오지 못했습니다."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
 
-    loadData();
-  }, [loadData, navigate]);
+    loadAccount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("access_token");
+    logout();
     navigate("/login");
   };
 
+  const handleTransfer = () => {
+    navigate("/transfer");
+  };
+
+  const handleWithdraw = () => {
+    navigate("/withdraw");
+  };
+
   if (loading) {
-    return <p>계좌 정보를 불러오는 중입니다...</p>;
+    return (
+      <main className="page-container">
+        <h1 className="page-title">
+          내 계좌
+        </h1>
+
+        <p>
+          계좌 정보를 불러오는 중입니다...
+        </p>
+      </main>
+    );
   }
 
   return (
-    <main>
-      <h1>내 계좌</h1>
+    <main className="page-container">
+      <div className="account-page">
+        <div className="account-header">
+          <div>
+            <h1 className="page-title">
+              내 계좌
+            </h1>
 
-      {error && <p className="error-message">{error}</p>}
+            {user && (
+              <p className="page-description">
+                {user.username}님의 계좌입니다.
+              </p>
+            )}
+          </div>
+        </div>
 
-      <AccountCard account={account} />
+        {error && (
+          <div
+            className="error-message"
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
 
-      <div>
-        <button onClick={() => navigate("/transfer")}>
-          이체
-        </button>
+        {!error && account && (
+          <>
+            <section className="account-card">
+              <div className="account-info-row">
+                <span className="account-label">
+                  계좌번호
+                </span>
 
-        <button onClick={() => navigate("/withdraw")}>
-          출금
-        </button>
+                <strong className="account-value">
+                  {account.account_number}
+                </strong>
+              </div>
 
-        <button onClick={loadData}>
-          새로고침
-        </button>
+              <div className="account-info-row">
+                <span className="account-label">
+                  잔액
+                </span>
 
-        <button onClick={handleLogout}>
-          로그아웃
-        </button>
+                <strong className="account-balance">
+                  {Number(
+                    account.balance ?? 0
+                  ).toLocaleString()}
+                  원
+                </strong>
+              </div>
+
+              {account.opened_at && (
+                <div className="account-info-row">
+                  <span className="account-label">
+                    개설일
+                  </span>
+
+                  <span className="account-value">
+                    {new Date(
+                      account.opened_at
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </section>
+
+            <div className="account-actions">
+              <button
+                type="button"
+                className="action-button"
+                onClick={handleTransfer}
+              >
+                송금
+              </button>
+
+              <button
+                type="button"
+                className="action-button"
+                onClick={handleWithdraw}
+              >
+                출금
+              </button>
+            </div>
+          </>
+        )}
+
+        {!loading &&
+          !error &&
+          !account && (
+            <p>
+              계좌 정보를 찾을 수 없습니다.
+            </p>
+          )}
+
+        <div className="account-footer">
+          <button
+            type="button"
+            className="action-button"
+            onClick={handleLogout}
+          >
+            로그아웃
+          </button>
+        </div>
       </div>
-
-      <section>
-        <h2>최근 거래 내역</h2>
-
-        <TransactionHistoryTable
-          transactions={transactions}
-          myAccountId={account?.id}
-          myAccountNumber={account?.account_number}
-        />
-      </section>
     </main>
   );
 }

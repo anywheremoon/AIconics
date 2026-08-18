@@ -1,44 +1,58 @@
-const API_BASE_URL = "";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 async function request(path, options = {}) {
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+  const token =
+    localStorage.getItem("access_token");
+
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      ...options,
+
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
+
+        ...(token
+          ? {
+              Authorization:
+                `Bearer ${token}`,
+            }
+          : {}),
+
         ...options.headers,
       },
-      ...options,
-    });
-
-    if (!response.ok) {
-      let errorMessage = `API 요청 실패: ${response.status}`;
-
-      try {
-        const errorData = await response.json();
-
-        if (errorData.detail) {
-          errorMessage = errorData.detail;
-        }
-      } catch {
-        // JSON 오류 응답이 아니면 기본 메시지를 사용한다.
-      }
-
-      throw new Error(errorMessage);
     }
+  );
 
-    return await response.json();
-  } catch (error) {
-    console.error("API 요청 오류:", error);
+  const data = await response
+    .json()
+    .catch(() => null);
 
-    if (error instanceof TypeError) {
-      throw new Error(
-        "API 요청에 실패했습니다. FastAPI 서버와 Vite 프록시 설정을 확인하세요."
-      );
-    }
+  if (response.status === 401) {
+    localStorage.removeItem(
+      "access_token"
+    );
 
-    throw error;
+    throw new Error(
+      "로그인이 만료되었습니다. 다시 로그인해주세요."
+    );
   }
+
+  if (response.status === 403) {
+    throw new Error(
+      "관리자 권한이 필요합니다."
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.detail ||
+        "요청 처리에 실패했습니다."
+    );
+  }
+
+  return data;
 }
 
 export function getEventLogs() {

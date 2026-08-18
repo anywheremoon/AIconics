@@ -1,11 +1,15 @@
-//로그인 화면
+// 로그인 화면
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
-import { login } from "../api/authApi.js";
+import { login as loginApi } from "../api/authApi.js";
+import { useAuth } from "../auth/AuthContext.jsx";
 
 function LoginPage() {
   const navigate = useNavigate();
+
+  // AuthContext의 login 함수
+  const { login: saveLogin } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -26,23 +30,34 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await login({
+      // 백엔드 로그인 API 호출
+      const result = await loginApi({
         username: username.trim(),
         password,
       });
 
+      // 로그인 응답 확인
       if (!result?.access_token) {
         throw new Error("JWT가 반환되지 않았습니다.");
       }
 
-      localStorage.setItem(
-        "access_token",
-        result.access_token
-      );
+      if (!result?.user) {
+        throw new Error("사용자 정보가 반환되지 않았습니다.");
+      }
 
-      navigate("/account");
+      // AuthContext에 로그인 정보 저장
+      saveLogin(result);
+
+      // 역할에 따라 이동
+      if (result.user.role === "ADMIN") {
+        navigate("/dashboard");
+      } else {
+        navigate("/account");
+      }
     } catch (err) {
-      setError(err.message || "로그인에 실패했습니다.");
+      setError(
+        err.message || "로그인에 실패했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -57,7 +72,9 @@ function LoginPage() {
           <label>사용자명</label>
           <input
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) =>
+              setUsername(e.target.value)
+            }
             disabled={loading}
           />
         </div>
@@ -67,20 +84,34 @@ function LoginPage() {
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
             disabled={loading}
           />
         </div>
 
-        {error && <p className="error-message">{error}</p>}
+        {error && (
+          <p className="error-message">
+            {error}
+          </p>
+        )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "로그인 중..." : "로그인"}
+        <button
+          type="submit"
+          disabled={loading}
+        >
+          {loading
+            ? "로그인 중..."
+            : "로그인"}
         </button>
       </form>
 
       <p>
-        계정이 없나요? <Link to="/register">회원가입</Link>
+        계정이 없나요?{" "}
+        <Link to="/register">
+          회원가입
+        </Link>
       </p>
     </main>
   );
