@@ -109,7 +109,7 @@ def test_insufficient_balance(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "insufficient-balance-001",
+            "request_id": "00000000-0000-4000-8000-000000000003",
             "recipient_account_number": "222222222222",
             "amount": "10000.00",
         },
@@ -143,7 +143,7 @@ def test_zero_amount_transfer(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "zero-amount-001",
+            "request_id": "00000000-0000-4000-8000-000000000004",
             "recipient_account_number": "444444444444",
             "amount": "0.00",
         },
@@ -168,7 +168,7 @@ def test_negative_amount_transfer(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "negative-amount-001",
+            "request_id": "00000000-0000-4000-8000-000000000005",
             "recipient_account_number": "666666666666",
             "amount": "-1000.00",
         },
@@ -188,7 +188,7 @@ def test_transfer_to_same_account(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "same-account-001",
+            "request_id": "00000000-0000-4000-8000-000000000006",
             "recipient_account_number": "777777777777",
             "amount": "1000.00",
         },
@@ -208,7 +208,7 @@ def test_transfer_to_nonexistent_account(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "missing-recipient-001",
+            "request_id": "00000000-0000-4000-8000-000000000007",
             "recipient_account_number": "999999999999",
             "amount": "1000.00",
         },
@@ -233,7 +233,7 @@ def test_duplicate_request_id_does_not_double_charge(client):
     authenticate_as(sender_id)
 
     request_data = {
-        "request_id": "duplicate-request-001",
+        "request_id": "00000000-0000-4000-8000-000000000008",
         "recipient_account_number": "343434343434",
         "amount": "10000.00",
     }
@@ -262,7 +262,7 @@ def test_duplicate_request_id_does_not_double_charge(client):
     ).first()
 
     transaction_count = db.query(Transaction).filter(
-        Transaction.request_id == "duplicate-request-001"
+        Transaction.request_id == "00000000-0000-4000-8000-000000000008"
     ).count()
 
     assert float(sender.balance) == 90000.00

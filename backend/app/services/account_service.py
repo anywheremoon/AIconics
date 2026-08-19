@@ -49,26 +49,13 @@ def get_or_create_my_account(db: Session, user_id: int):
         return account
 
 
-def _existing_transaction_or_conflict(
-    db: Session,
-    request_id: str,
-    sender_account_id: int,
-    transaction_type: str,
-    amount: Decimal,
-):
+def _ensure_request_id_available(db: Session, request_id: str) -> None:
     existing = transaction_repository.find_by_request_id(db, request_id)
-    if existing is None:
-        return None
-    if (
-        existing.sender_account_id != sender_account_id
-        or existing.transaction_type != transaction_type
-        or existing.amount != amount
-    ):
+    if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="request_id was already used for a different transaction",
+            detail="request_id was already processed",
         )
-    return existing
 
 
 def list_my_transactions(db: Session, user_id: int):
@@ -110,11 +97,7 @@ def list_my_transactions(db: Session, user_id: int):
 def transfer(db: Session, user_id: int, data):
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
-    existing = _existing_transaction_or_conflict(
-        db, request_id, sender.id, "TRANSFER", data.amount
-    )
-    if existing is not None:
-        return existing
+    _ensure_request_id_available(db, request_id)
 
     recipient = account_repository.find_by_account_number(
         db, data.recipient_account_number
@@ -151,11 +134,7 @@ def transfer(db: Session, user_id: int, data):
 def withdraw(db: Session, user_id: int, data):
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
-    existing = _existing_transaction_or_conflict(
-        db, request_id, sender.id, "WITHDRAW", data.amount
-    )
-    if existing is not None:
-        return existing
+    _ensure_request_id_available(db, request_id)
 
     sender = account_repository.lock_by_ids(db, [sender.id])[0]
     if sender.balance < data.amount:

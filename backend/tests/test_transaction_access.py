@@ -203,7 +203,7 @@ def test_withdraw_from_own_account(client):
     response = client.post(
         "/api/transactions/withdraw",
         json={
-            "request_id": "withdraw-test-001",
+            "request_id": "00000000-0000-4000-8000-000000000001",
             "amount": "10000.00",
         },
     )
@@ -236,7 +236,7 @@ def test_transfer_to_another_user(client):
     response = client.post(
         "/api/transactions/transfer",
         json={
-            "request_id": "transfer-test-001",
+            "request_id": "00000000-0000-4000-8000-000000000002",
             "recipient_account_number": "777777777777",
             "amount": "10000.00",
         },

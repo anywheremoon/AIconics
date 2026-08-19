@@ -75,6 +75,29 @@ def test_new_user_role_is_user(db):
     assert user.role == "USER"
 
 
+def test_register_then_login_round_trip(client, db):
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "new_user",
+            "password": "password1234",
+            "device_id": "test-device",
+            "location": "Seoul",
+        },
+    )
+
+    assert register_response.status_code == 201
+    registered_user = user_repository.find_by_username(db, "new_user")
+    assert registered_user is not None
+    assert registered_user.role == "USER"
+
+    login_response = login(client, "new_user")
+
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["role"] == "USER"
+    assert login_response.json()["access_token"]
+
+
 def test_login_response_includes_user_role(client, db):
     user = create_user(db, "user01")
 
