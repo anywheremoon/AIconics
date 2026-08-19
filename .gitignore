@@ -27,3 +27,5 @@ frontend/.vite/
 
 # Generic node
 node_modules/
+
+.pytest_cache/

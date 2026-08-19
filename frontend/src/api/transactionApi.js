@@ -1,5 +1,5 @@
 //거래 관련 backend api 호출
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 function getToken() {
   return localStorage.getItem("access_token");

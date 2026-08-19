@@ -1,5 +1,5 @@
 //사용자 초기 프로필 조회 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 export async function getMyUserProfile() {
   const token = localStorage.getItem("access_token");
