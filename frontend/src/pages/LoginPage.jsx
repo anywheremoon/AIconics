@@ -64,55 +64,88 @@ function LoginPage() {
   };
 
   return (
-    <main>
-      <h1>로그인</h1>
+    <main className="auth-page">
+      <section className="auth-card">
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>사용자명</label>
-          <input
-            value={username}
-            onChange={(e) =>
-              setUsername(e.target.value)
-            }
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label>비밀번호</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) =>
-              setPassword(e.target.value)
-            }
-            disabled={loading}
-          />
-        </div>
-
-        {error && (
-          <p className="error-message">
-            {error}
+        <div className="auth-header">
+          <p className="auth-eyebrow">
+            SECURE ACCESS
           </p>
-        )}
 
-        <button
-          type="submit"
-          disabled={loading}
+          <h1 className="auth-title">
+            로그인
+          </h1>
+
+          <p className="auth-description">
+            계정에 로그인하여 서비스를 이용하세요.
+          </p>
+        </div>
+
+        <form
+          className="auth-form"
+          onSubmit={handleSubmit}
         >
-          {loading
-            ? "로그인 중..."
-            : "로그인"}
-        </button>
-      </form>
+          <label className="auth-field">
+            <span>사용자명</span>
 
-      <p>
-        계정이 없나요?{" "}
-        <Link to="/register">
-          회원가입
-        </Link>
-      </p>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) =>
+                setUsername(e.target.value)
+              }
+              placeholder="사용자명을 입력하세요"
+              disabled={loading}
+              autoComplete="username"
+            />
+          </label>
+
+          <label className="auth-field">
+            <span>비밀번호</span>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
+              placeholder="비밀번호를 입력하세요"
+              disabled={loading}
+              autoComplete="current-password"
+            />
+          </label>
+
+          {error && (
+            <p className="auth-error">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="auth-submit-button"
+            disabled={loading}
+          >
+            {loading
+              ? "로그인 중..."
+              : "로그인"}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          <span>
+            계정이 없나요?
+          </span>
+
+          <Link
+            to="/register"
+            className="auth-link"
+          >
+            회원가입
+          </Link>
+        </div>
+
+      </section>
     </main>
   );
 }

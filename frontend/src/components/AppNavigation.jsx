@@ -22,35 +22,74 @@ function AppNavigation() {
     navigate("/login");
   };
 
+  const getNavLinkClass = ({ isActive }) => {
+    return isActive
+      ? "nav-link nav-link-active"
+      : "nav-link";
+  };
+
   return (
-    <nav>
-      <NavLink to="/account">
-        내 계좌
-      </NavLink>
+    <header className="app-header">
+      <div className="app-header-inner">
 
-      {user.role === "ADMIN" && (
-        <>
-          <NavLink to="/dashboard">
-            대시보드
+        {/* 왼쪽 로고 */}
+        <NavLink
+          to={
+            user.role === "ADMIN"
+              ? "/dashboard"
+              : "/account"
+          }
+          className="app-logo"
+        >
+          AIconics
+        </NavLink>
+
+        {/* 오른쪽 메뉴 */}
+        <nav className="app-navigation">
+
+          <NavLink
+            to="/account"
+            className={getNavLinkClass}
+          >
+            내 계좌
           </NavLink>
 
-          <NavLink to="/suspicious-users">
-            의심 사용자
-          </NavLink>
+          {user.role === "ADMIN" && (
+            <>
+              <NavLink
+                to="/dashboard"
+                className={getNavLinkClass}
+              >
+                대시보드
+              </NavLink>
 
-          <NavLink to="/event-logs">
-            행동 로그
-          </NavLink>
-        </>
-      )}
+              <NavLink
+                to="/suspicious-users"
+                className={getNavLinkClass}
+              >
+                의심 사용자
+              </NavLink>
 
-      <button
-        type="button"
-        onClick={handleLogout}
-      >
-        로그아웃
-      </button>
-    </nav>
+              <NavLink
+                to="/event-logs"
+                className={getNavLinkClass}
+              >
+                행동 로그
+              </NavLink>
+            </>
+          )}
+
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            로그아웃
+          </button>
+
+        </nav>
+      </div>
+    </header>
   );
 }
 
