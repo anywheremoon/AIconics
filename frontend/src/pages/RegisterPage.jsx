@@ -1,4 +1,4 @@
-//회원가입 화면
+// 회원가입 화면
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -70,74 +70,94 @@ function RegisterPage() {
   };
 
   return (
-    <main>
-      <h1>회원가입</h1>
+    <main className="auth-page">
+      <div className="auth-card">
+        <h1 className="auth-title">회원가입</h1>
+        <p className="auth-description">
+          계정을 생성하고 서비스를 이용해보세요.
+        </p>
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>사용자명</label>
-          <input
-            name="username"
-            value={form.username}
-            onChange={handleChange}
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <div className="auth-field">
+            <label htmlFor="username">사용자명</label>
+            <input
+              id="username"
+              name="username"
+              value={form.username}
+              onChange={handleChange}
+              placeholder="사용자명을 입력하세요"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="password">비밀번호</label>
+            <input
+              id="password"
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              placeholder="비밀번호를 입력하세요"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="passwordConfirm">비밀번호 확인</label>
+            <input
+              id="passwordConfirm"
+              type="password"
+              name="passwordConfirm"
+              value={form.passwordConfirm}
+              onChange={handleChange}
+              placeholder="비밀번호를 다시 입력하세요"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="deviceId">장치 ID</label>
+            <input
+              id="deviceId"
+              name="deviceId"
+              value={form.deviceId}
+              onChange={handleChange}
+              placeholder="device-001"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="location">지역</label>
+            <input
+              id="location"
+              name="location"
+              value={form.location}
+              onChange={handleChange}
+              placeholder="Seoul"
+              disabled={loading}
+            />
+          </div>
+
+          {error && <p className="error-message">{error}</p>}
+
+          <button
+            className="auth-submit-button"
+            type="submit"
             disabled={loading}
-          />
-        </div>
+          >
+            {loading ? "가입 중..." : "회원가입"}
+          </button>
+        </form>
 
-        <div>
-          <label>비밀번호</label>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label>비밀번호 확인</label>
-          <input
-            type="password"
-            name="passwordConfirm"
-            value={form.passwordConfirm}
-            onChange={handleChange}
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label>장치 ID</label>
-          <input
-            name="deviceId"
-            value={form.deviceId}
-            onChange={handleChange}
-            placeholder="device-001"
-            disabled={loading}
-          />
-        </div>
-
-        <div>
-          <label>지역</label>
-          <input
-            name="location"
-            value={form.location}
-            onChange={handleChange}
-            placeholder="Seoul"
-            disabled={loading}
-          />
-        </div>
-
-        {error && <p className="error-message">{error}</p>}
-
-        <button type="submit" disabled={loading}>
-          {loading ? "가입 중..." : "회원가입"}
-        </button>
-      </form>
-
-      <p>
-        이미 계정이 있나요? <Link to="/login">로그인</Link>
-      </p>
+        <p className="auth-footer">
+          이미 계정이 있나요?{" "}
+          <Link to="/login" className="auth-link">
+            로그인
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }
