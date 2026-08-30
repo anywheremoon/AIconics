@@ -8,7 +8,6 @@ import { useAuth } from "../auth/AuthContext.jsx";
 function LoginPage() {
   const navigate = useNavigate();
 
-  // AuthContext의 login 함수
   const { login: saveLogin } = useAuth();
 
   const [username, setUsername] = useState("");
@@ -30,13 +29,11 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      // 백엔드 로그인 API 호출
       const result = await loginApi({
         username: username.trim(),
         password,
       });
 
-      // 로그인 응답 확인
       if (!result?.access_token) {
         throw new Error("JWT가 반환되지 않았습니다.");
       }
@@ -48,12 +45,18 @@ function LoginPage() {
       // AuthContext에 로그인 정보 저장
       saveLogin(result);
 
-      // 역할에 따라 이동
+      // 개발/Agent 연동 테스트용
+      console.log(
+        "Agent 테스트용 access_token:",
+        result.access_token
+      );
+
       if (result.user.role === "ADMIN") {
         navigate("/dashboard");
       } else {
         navigate("/account");
       }
+
     } catch (err) {
       setError(
         err.message || "로그인에 실패했습니다."
