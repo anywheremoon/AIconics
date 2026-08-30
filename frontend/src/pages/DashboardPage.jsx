@@ -4,15 +4,25 @@ import RiskCard from "../components/RiskCard";
 import RiskLineChart from "../components/RiskLineChart";
 import { getEventLogs } from "../api/riskApi.js";
 
+
 const DASHBOARD_STYLES = `
   .dashboard-page {
     min-height: 100vh;
     padding: clamp(24px, 4vw, 56px);
     color: #202338;
     background:
-      radial-gradient(circle at 8% 0%, rgba(109, 93, 252, .10), transparent 28rem),
+      radial-gradient(
+        circle at 8% 0%,
+        rgba(109, 93, 252, .10),
+        transparent 28rem
+      ),
       #f6f7fb;
-    font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif;
+    font-family:
+      Inter,
+      Pretendard,
+      "Noto Sans KR",
+      system-ui,
+      sans-serif;
   }
 
   .dashboard-content {
@@ -48,7 +58,8 @@ const DASHBOARD_STYLES = `
 
   .risk-card-container {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
     gap: 16px;
     margin-bottom: 22px;
   }
@@ -61,7 +72,9 @@ const DASHBOARD_STYLES = `
     border: 1px solid #e8e9f1;
     border-radius: 18px;
     background: rgba(255, 255, 255, .94);
-    box-shadow: 0 12px 34px rgba(40, 44, 74, .06);
+    box-shadow:
+      0 12px 34px
+      rgba(40, 44, 74, .06);
   }
 
   .risk-card::after {
@@ -112,13 +125,6 @@ const DASHBOARD_STYLES = `
     flex: 0 0 auto;
     border-radius: 50%;
     background: var(--risk-color);
-    box-shadow:
-      0 0 0 5px
-      color-mix(
-        in srgb,
-        var(--risk-color) 12%,
-        transparent
-      );
   }
 
   .risk-card-value {
@@ -143,7 +149,9 @@ const DASHBOARD_STYLES = `
     border: 1px solid #e8e9f1;
     border-radius: 22px;
     background: #fff;
-    box-shadow: 0 16px 40px rgba(40, 44, 74, .06);
+    box-shadow:
+      0 16px 40px
+      rgba(40, 44, 74, .06);
   }
 
   .risk-chart-heading {
@@ -208,69 +216,10 @@ const DASHBOARD_STYLES = `
     cursor: help;
   }
 
-  .risk-chart-point:focus {
-    outline: none;
-    fill: #6d5dfc;
-    stroke: #fff;
-  }
-
   .risk-chart-axis-x,
   .risk-chart-axis-y {
     fill: #9295a7;
     font-size: 11px;
-  }
-
-  .risk-chart-axis-x {
-    text-anchor: middle;
-  }
-
-  .risk-chart-axis-y {
-    text-anchor: end;
-  }
-
-  .risk-chart-empty {
-    display: grid;
-    min-height: 260px;
-    place-items: center;
-    align-content: center;
-    padding: 20px;
-    border: 1px dashed #dedfeb;
-    border-radius: 16px;
-    color: #777b91;
-    text-align: center;
-  }
-
-  .risk-chart-loading {
-    display: grid;
-    min-height: 260px;
-    place-items: center;
-    border-radius: 16px;
-    color: #73768a;
-    background:
-      linear-gradient(
-        100deg,
-        #f4f4f8 20%,
-        #fafafe 45%,
-        #f4f4f8 70%
-      );
-    background-size: 200% 100%;
-    animation: dashboard-shimmer 1.4s infinite;
-  }
-
-  .risk-chart-empty span {
-    margin-bottom: 10px;
-    color: #a3a0ff;
-    font-size: 38px;
-  }
-
-  .risk-chart-empty strong {
-    color: #3f4257;
-    font-size: 15px;
-  }
-
-  .risk-chart-empty p {
-    margin: 7px 0 0;
-    font-size: 13px;
   }
 
   .dashboard-loading,
@@ -325,7 +274,8 @@ const DASHBOARD_STYLES = `
         #eeeef4 75%
       );
     background-size: 200% 100%;
-    animation: dashboard-shimmer 1.4s infinite;
+    animation:
+      dashboard-shimmer 1.4s infinite;
   }
 
   @keyframes dashboard-shimmer {
@@ -336,7 +286,8 @@ const DASHBOARD_STYLES = `
 
   @media (max-width: 980px) {
     .risk-card-container {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns:
+        repeat(2, minmax(0, 1fr));
     }
   }
 
@@ -358,14 +309,6 @@ const DASHBOARD_STYLES = `
       min-height: auto;
     }
 
-    .risk-chart-heading {
-      display: block;
-    }
-
-    .risk-chart-summary {
-      margin-top: 15px;
-    }
-
     .dashboard-error {
       align-items: flex-start;
       flex-direction: column;
@@ -374,30 +317,44 @@ const DASHBOARD_STYLES = `
 
   @media (prefers-reduced-motion: reduce) {
     .risk-card-skeleton .risk-card-value,
-    .risk-card-skeleton p,
-    .risk-chart-loading {
+    .risk-card-skeleton p {
       animation: none;
     }
   }
 `;
 
+
+/**
+ * 위험 등급 정규화
+ */
 function normalizeLevel(level, score) {
-  const normalized = String(level ?? "").toLowerCase();
+  const normalized =
+    String(level ?? "").toLowerCase();
 
   if (
-    ["low", "normal", "safe"].includes(normalized)
+    ["low", "normal", "safe"].includes(
+      normalized
+    )
   ) {
     return "low";
   }
 
   if (
-    ["medium", "warning", "caution"].includes(normalized)
+    [
+      "medium",
+      "warning",
+      "caution",
+    ].includes(normalized)
   ) {
     return "medium";
   }
 
   if (
-    ["high", "danger", "critical"].includes(normalized)
+    [
+      "high",
+      "danger",
+      "critical",
+    ].includes(normalized)
   ) {
     return "high";
   }
@@ -413,6 +370,11 @@ function normalizeLevel(level, score) {
   return "low";
 }
 
+
+/**
+ * 백엔드 Event 형식을
+ * Dashboard에서 사용하기 좋은 형태로 변환
+ */
 function normalizeEvents(payload) {
   const source = Array.isArray(payload)
     ? payload
@@ -455,25 +417,74 @@ function normalizeEvents(payload) {
           event?.id ??
           `${userId}-${timestamp ?? index}`,
 
-        userId: String(userId),
+        userId:
+          String(userId),
 
-        riskScore: Math.min(
-          100,
-          Math.max(0, score)
-        ),
+        riskScore:
+          Math.min(
+            100,
+            Math.max(0, score)
+          ),
 
-        riskLevel: normalizeLevel(
-          event?.risk_level ??
-            event?.riskLevel,
-          score
-        ),
+        riskLevel:
+          normalizeLevel(
+            event?.risk_level ??
+              event?.riskLevel,
+            score
+          ),
 
         timestamp,
+
+        // 6단계 ML 이상 탐지 결과
+        detectAnomaly:
+          Boolean(
+            event?.detect_anomaly ??
+              event?.is_anomaly ??
+              event?.detectAnomaly ??
+              false
+          ),
+
+        // 프로필 차이 점수
+        profileDeviationScore:
+          event?.profile_deviation_score ??
+          event?.profileDeviationScore ??
+          null,
       };
     })
     .filter(Boolean);
 }
 
+
+/**
+ * 오늘 발생한 이벤트인지 확인
+ */
+function isToday(timestamp) {
+  if (!timestamp) {
+    return false;
+  }
+
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+
+  return (
+    date.getFullYear() ===
+      today.getFullYear() &&
+    date.getMonth() ===
+      today.getMonth() &&
+    date.getDate() ===
+      today.getDate()
+  );
+}
+
+
+/**
+ * Dashboard 통계 계산
+ */
 function calculateSummary(events) {
   const latestByUser = new Map();
 
@@ -481,25 +492,15 @@ function calculateSummary(events) {
     const current =
       latestByUser.get(event.userId);
 
-    const parsedEventTime =
+    const eventTime =
       new Date(
         event.timestamp ?? 0
       ).getTime();
 
-    const parsedCurrentTime =
+    const currentTime =
       new Date(
         current?.timestamp ?? 0
       ).getTime();
-
-    const eventTime =
-      Number.isFinite(parsedEventTime)
-        ? parsedEventTime
-        : 0;
-
-    const currentTime =
-      Number.isFinite(parsedCurrentTime)
-        ? parsedCurrentTime
-        : 0;
 
     if (
       !current ||
@@ -512,13 +513,18 @@ function calculateSummary(events) {
     }
   });
 
+
+  // 사용자별 가장 최근 이벤트
   const users = [
     ...latestByUser.values(),
   ];
 
+
+  // 위험 등급별 사용자 수
   const counts = users.reduce(
     (result, user) => {
       result[user.riskLevel] += 1;
+
       return result;
     },
     {
@@ -528,21 +534,33 @@ function calculateSummary(events) {
     }
   );
 
-  const averageRiskScore =
-    users.length > 0
-      ? users.reduce(
-          (sum, user) =>
-            sum + user.riskScore,
-          0
-        ) / users.length
-      : 0;
+
+  // 오늘 이벤트 수
+  const todayEventCount =
+    events.filter((event) =>
+      isToday(event.timestamp)
+    ).length;
+
+
+  // ML 이상 탐지 이벤트 수
+  const anomalyCount =
+    events.filter(
+      (event) =>
+        event.detectAnomaly
+    ).length;
+
 
   return {
     total: users.length,
+
     ...counts,
-    averageRiskScore,
+
+    todayEventCount,
+
+    anomalyCount,
   };
 }
+
 
 function DashboardPage() {
   const [events, setEvents] =
@@ -557,6 +575,10 @@ function DashboardPage() {
   const [reloadKey, setReloadKey] =
     useState(0);
 
+
+  /**
+   * 행동 로그 조회
+   */
   useEffect(() => {
     let cancelled = false;
 
@@ -573,7 +595,9 @@ function DashboardPage() {
             normalizeEvents(payload)
           );
         }
+
       } catch (requestError) {
+
         if (!cancelled) {
           setEvents([]);
 
@@ -582,7 +606,9 @@ function DashboardPage() {
               "위험도 데이터를 불러오지 못했습니다."
           );
         }
+
       } finally {
+
         if (!cancelled) {
           setLoading(false);
         }
@@ -594,79 +620,134 @@ function DashboardPage() {
     return () => {
       cancelled = true;
     };
+
   }, [reloadKey]);
 
+
+  /**
+   * Dashboard 요약
+   */
   const summary = useMemo(
     () => calculateSummary(events),
     [events]
   );
 
+
+  /**
+   * 위험도 변화 그래프
+   */
   const riskHistory = useMemo(
     () =>
       events
         .filter(
-          (event) => event.timestamp
+          (event) =>
+            event.timestamp
         )
         .map((event) => ({
           id: event.id,
-          timestamp: event.timestamp,
-          riskScore: event.riskScore,
+          timestamp:
+            event.timestamp,
+          riskScore:
+            event.riskScore,
         })),
     [events]
   );
 
+
+  /**
+   * 6단계 Dashboard 카드
+   */
   const cards = [
     {
       title: "전체 사용자",
-      value: `${summary.total.toLocaleString()}명`,
+
+      value:
+        `${summary.total.toLocaleString()}명`,
+
       level: "neutral",
+
       description:
-        "현재 위험도를 분석한 전체 사용자",
+        "지속 인증 분석 대상 전체 사용자",
     },
+
+    {
+      title: "오늘 이벤트",
+
+      value:
+        `${summary.todayEventCount.toLocaleString()}건`,
+
+      level: "neutral",
+
+      description:
+        "오늘 Agent에서 수집된 행동 이벤트",
+    },
+
     {
       title: "정상 사용자",
-      value: `${summary.low.toLocaleString()}명`,
+
+      value:
+        `${summary.low.toLocaleString()}명`,
+
       level: "low",
+
       description:
-        "리스크 점수 40점 미만",
+        "Risk Score 40점 미만",
     },
+
     {
       title: "주의 사용자",
-      value: `${summary.medium.toLocaleString()}명`,
+
+      value:
+        `${summary.medium.toLocaleString()}명`,
+
       level: "medium",
+
       description:
-        "리스크 점수 40점 이상 70점 미만",
+        "Risk Score 40점 이상 70점 미만",
     },
+
     {
       title: "위험 사용자",
-      value: `${summary.high.toLocaleString()}명`,
-      level: "high",
-      description:
-        "즉시 확인이 필요한 사용자",
-    },
-    {
-      title: "평균 리스크",
+
       value:
-        `${summary.averageRiskScore.toFixed(1)}점`,
-      level:
-        summary.averageRiskScore >= 70
-          ? "high"
-          : summary.averageRiskScore >= 40
-            ? "medium"
-            : "low",
+        `${summary.high.toLocaleString()}명`,
+
+      level: "high",
+
       description:
-        "사용자별 최신 점수의 평균",
+        "Risk Score 70점 이상",
+    },
+
+    {
+      title: "ML 이상 탐지",
+
+      value:
+        `${summary.anomalyCount.toLocaleString()}건`,
+
+      level:
+        summary.anomalyCount > 0
+          ? "high"
+          : "low",
+
+      description:
+        "One-Class SVM이 이상으로 판단한 이벤트",
     },
   ];
 
+
   return (
     <main className="dashboard-page">
+
       <style>
         {DASHBOARD_STYLES}
       </style>
 
+
       <div className="dashboard-content">
+
+        {/* Dashboard Header */}
         <header className="dashboard-header">
+
           <span className="dashboard-eyebrow">
             SECURITY OVERVIEW
           </span>
@@ -676,11 +757,15 @@ function DashboardPage() {
           </h1>
 
           <p>
-            사용자 행동 분석 결과와 최근
-            리스크 변화를 한눈에 확인하세요.
+            지속 인증 행동 분석과
+            합성 신원 탐지 결과를
+            한눈에 확인하세요.
           </p>
+
         </header>
 
+
+        {/* Loading */}
         {loading && (
           <div
             className="dashboard-loading"
@@ -692,11 +777,14 @@ function DashboardPage() {
           </div>
         )}
 
+
+        {/* Error */}
         {error && (
           <div
             className="dashboard-error"
             role="alert"
           >
+
             <span>
               {error}
             </span>
@@ -711,28 +799,37 @@ function DashboardPage() {
             >
               다시 시도
             </button>
+
           </div>
         )}
 
+
+        {/* Empty */}
         {!loading &&
           !error &&
           events.length === 0 && (
+
             <div
               className="dashboard-empty"
               role="status"
             >
               아직 분석된 사용자 데이터가
-              없습니다. 이벤트가 수집되면
-              현황이 자동으로 표시됩니다.
+              없습니다. Agent에서 이벤트가
+              수집되면 자동으로 표시됩니다.
             </div>
+
           )}
 
+
+        {/* Risk Summary Cards */}
         <section
           className="risk-card-container"
           aria-label="위험도 요약"
         >
+
           {loading
             ? cards.map((card) => (
+
                 <div
                   className="risk-card-skeleton"
                   key={card.title}
@@ -741,25 +838,36 @@ function DashboardPage() {
                     title={card.title}
                     value="불러오는 중"
                     level="neutral"
-                    description="데이터를 확인하고 있습니다."
+                    description=
+                      "데이터를 확인하고 있습니다."
                   />
                 </div>
+
               ))
+
             : cards.map((card) => (
+
                 <RiskCard
                   key={card.title}
                   {...card}
                 />
+
               ))}
+
         </section>
 
+
+        {/* 위험도 변화 그래프 */}
         <RiskLineChart
           data={riskHistory}
           loading={loading}
         />
+
       </div>
+
     </main>
   );
 }
+
 
 export default DashboardPage;
