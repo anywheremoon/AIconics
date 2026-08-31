@@ -1,45 +1,38 @@
 from app.services.ml_engine import detect_anomaly
 
 
-def calculate_risk_score(event_data):
+def calculate_risk_score(
+    event_data,
+    profile_comparison: dict | None = None,
+):
+    """
+    Profile 비교 결과와 One-Class SVM 결과를 합쳐
+    최종 Risk Score를 계산한다.
+    """
 
-    score = 0
+    comparison = profile_comparison or {}
 
-    # 새 기기 +20점
-    if event_data.is_new_device:
-        score += 20
+    # Profile Comparison에서 계산한 점수
+    score = int(
+        comparison.get(
+            "profile_deviation_score",
+            0,
+        )
+    )
 
-    # 위치 정보 없음 +15점
-    if not event_data.location:
-        score += 15
-
-    # 타이핑 속도 이상 +20점
-    if event_data.typing_speed < 80 or event_data.typing_speed > 300:
-        score += 20
-
-    # 마우스 이동 부족 +10점
-    if event_data.mouse_move_count < 50:
-        score += 10
-
-    # 클릭 수 과다 +10점
-    if event_data.click_count > 100:
-        score += 10
-
-    # Pydantic 객체 → dict
-    event_dict = event_data.model_dump()
+    # Pydantic 객체 또는 dict 모두 처리
+    if hasattr(event_data, "model_dump"):
+        event_dict = event_data.model_dump()
+    else:
+        event_dict = dict(event_data)
 
     # ==========================
     # ML 이상 탐지
     # ==========================
     ml_result = detect_anomaly(event_dict)
 
-    print("ML 결과:", ml_result)
-    print("ML 반영 전 점수:", score)
-
     if ml_result["is_anomaly"]:
         score += 30
-
-    print("ML 반영 후 점수:", score)
 
     # ==========================
     # 최종 점수
@@ -51,13 +44,19 @@ def calculate_risk_score(event_data):
         "risk_level": get_risk_level(final_score),
         "is_anomaly": ml_result["is_anomaly"],
         "ml_prediction": ml_result["prediction"],
-        "ml_decision_score": ml_result["decision_score"]
+        "ml_decision_score": ml_result["decision_score"],
+        "profile_deviation_score": comparison.get(
+            "profile_deviation_score",
+            0,
+        ),
     }
 
 
 def get_risk_level(score):
     if score >= 70:
         return "HIGH"
-    elif score >= 40:
+
+    if score >= 40:
         return "MEDIUM"
+
     return "LOW"
