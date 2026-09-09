@@ -40,14 +40,28 @@ function SuspiciousUsersPage() {
           id: user.id,
 
           userId: user.user_id,
+          sessionId: user.session_id,
           deviceId: user.device_id,
 
-          riskScore: user.risk_score,
-          riskLevel: user.risk_level,
+          behaviorScore:
+            user.behavior_score ?? null,
 
-          lastDetectedAt: user.created_at,
+          identityScore:
+            user.identity_score ?? null,
 
-          // 6단계 탐지 결과
+          riskScore:
+            user.risk_score ?? null,
+
+          riskLevel:
+            user.risk_level ?? null,
+
+          baselineStatus:
+            user.baseline_status ?? null,
+
+          lastDetectedAt:
+            user.created_at,
+
+          // 기존 탐지 결과
           detectAnomaly:
             user.detect_anomaly ?? false,
 
@@ -55,7 +69,9 @@ function SuspiciousUsersPage() {
             user.profile_deviation_score ?? null,
 
           newDevice:
-            user.new_device ?? false,
+            user.new_device ??
+            user.is_new_device ??
+            false,
 
           locationChanged:
             user.location_changed ?? false,
@@ -65,6 +81,12 @@ function SuspiciousUsersPage() {
 
           mouseAnomaly:
             user.mouse_anomaly ?? false,
+
+          // 신규 reasons 배열
+          reasons:
+            Array.isArray(user.reasons)
+              ? user.reasons
+              : [],
         }));
 
         setUsers(formattedUsers);
@@ -79,7 +101,7 @@ function SuspiciousUsersPage() {
 
         setError(
           requestError.message ||
-            "백엔드 서버에서 의심 사용자 목록을 불러오지 못했습니다."
+          "백엔드 서버에서 의심 사용자 목록을 불러오지 못했습니다."
         );
 
       } finally {
@@ -158,8 +180,8 @@ function SuspiciousUsersPage() {
           </h1>
 
           <p className="page-description">
-            리스크 점수가 높은 사용자를 검색하고
-            탐지 사유를 확인할 수 있습니다.
+            Behavior / Identity 위험도와
+            탐지 사유를 기준으로 의심 사용자를 확인합니다.
           </p>
         </div>
       </div>
@@ -315,6 +337,18 @@ function SuspiciousUsersPage() {
             </div>
 
 
+            {/* Session ID */}
+            <div className="event-detail-item">
+              <span>
+                Session ID
+              </span>
+
+              <strong>
+                {selectedUser.sessionId ?? "-"}
+              </strong>
+            </div>
+
+
             {/* 장치 */}
             <div className="event-detail-item">
               <span>
@@ -323,6 +357,42 @@ function SuspiciousUsersPage() {
 
               <strong>
                 {selectedUser.deviceId ?? "-"}
+              </strong>
+            </div>
+
+
+            {/* Baseline 상태 */}
+            <div className="event-detail-item">
+              <span>
+                Baseline 상태
+              </span>
+
+              <strong>
+                {selectedUser.baselineStatus ?? "-"}
+              </strong>
+            </div>
+
+
+            {/* Behavior Score */}
+            <div className="event-detail-item">
+              <span>
+                Behavior Score
+              </span>
+
+              <strong>
+                {selectedUser.behaviorScore ?? "-"}
+              </strong>
+            </div>
+
+
+            {/* Identity Score */}
+            <div className="event-detail-item">
+              <span>
+                Identity Score
+              </span>
+
+              <strong>
+                {selectedUser.identityScore ?? "-"}
               </strong>
             </div>
 
@@ -409,49 +479,87 @@ function SuspiciousUsersPage() {
               탐지 사유
             </h3>
 
-            <ul>
+            {selectedUser.reasons.length > 0 ? (
 
-              {selectedUser.newDevice && (
-                <li>
-                  새로운 장치에서 접근
-                </li>
-              )}
+              <ul>
+                {selectedUser.reasons.map(
+                  (reason, index) => (
+                    <li
+                      key={
+                        reason.reason_code ??
+                        index
+                      }
+                    >
+                      <strong>
+                        {reason.reason_code ??
+                          "UNKNOWN"}
+                      </strong>
 
-              {selectedUser.locationChanged && (
-                <li>
-                  평소와 다른 위치에서 접근
-                </li>
-              )}
+                      {reason.description && (
+                        <>
+                          {" - "}
+                          {reason.description}
+                        </>
+                      )}
 
-              {selectedUser.typingAnomaly && (
-                <li>
-                  평소와 다른 타이핑 패턴
-                </li>
-              )}
+                      {reason.score_contribution != null && (
+                        <>
+                          {" "}
+                          (+
+                          {reason.score_contribution})
+                        </>
+                      )}
+                    </li>
+                  )
+                )}
+              </ul>
 
-              {selectedUser.mouseAnomaly && (
-                <li>
-                  평소와 다른 마우스 행동
-                </li>
-              )}
+            ) : (
 
-              {selectedUser.detectAnomaly && (
-                <li>
-                  One-Class SVM 이상 탐지
-                </li>
-              )}
+              <ul>
 
-              {!selectedUser.newDevice &&
-                !selectedUser.locationChanged &&
-                !selectedUser.typingAnomaly &&
-                !selectedUser.mouseAnomaly &&
-                !selectedUser.detectAnomaly && (
+                {selectedUser.newDevice && (
                   <li>
-                    상세 탐지 사유 정보가 없습니다.
+                    새로운 장치에서 접근
                   </li>
                 )}
 
-            </ul>
+                {selectedUser.locationChanged && (
+                  <li>
+                    평소와 다른 위치에서 접근
+                  </li>
+                )}
+
+                {selectedUser.typingAnomaly && (
+                  <li>
+                    평소와 다른 타이핑 패턴
+                  </li>
+                )}
+
+                {selectedUser.mouseAnomaly && (
+                  <li>
+                    평소와 다른 마우스 행동
+                  </li>
+                )}
+
+                {selectedUser.detectAnomaly && (
+                  <li>
+                    One-Class SVM 이상 탐지
+                  </li>
+                )}
+
+                {!selectedUser.newDevice &&
+                  !selectedUser.locationChanged &&
+                  !selectedUser.typingAnomaly &&
+                  !selectedUser.mouseAnomaly &&
+                  !selectedUser.detectAnomaly && (
+                    <li>
+                      상세 탐지 사유 정보가 없습니다.
+                    </li>
+                  )}
+
+              </ul>
+            )}
 
           </div>
 

@@ -1,8 +1,7 @@
 import json
 import threading
 
-# 설정
-from config import SEND_INTERVAL
+import config
 
 # Device 정보
 from collectors.device_collector import get_device_info
@@ -51,9 +50,9 @@ def collect_behavior_data(duration=30):
     keyboard_thread.join()
 
     behavior_data = {
-        **results["mouse"],
-        **results["click"],
-        **results["keyboard"]
+        **results.get("mouse", {}),
+        **results.get("click", {}),
+        **results.get("keyboard", {})
     }
 
     return behavior_data
@@ -65,13 +64,25 @@ def main():
     print("Behavior Agent Started")
     print("=" * 50)
 
+    # JWT 인증 확인
+    if not config.ACCESS_TOKEN:
+        print("Agent 인증정보가 없습니다.")
+        print("현재는 테스트 시 AGENT_ACCESS_TOKEN이 필요합니다.")
+        return
+
+    # session_id는 아직 A 역할 구현 상태에 따라 없을 수도 있음
+    if config.SESSION_ID:
+        print(f"Session ID : {config.SESSION_ID}")
+    else:
+        print("Session ID가 아직 설정되지 않았습니다.")
+
     while True:
 
         print("\n행동 데이터 수집 중...")
 
         # SEND_INTERVAL 동안 행동 데이터 동시 수집
         behavior_data = collect_behavior_data(
-            duration=SEND_INTERVAL
+            duration=config.SEND_INTERVAL
         )
 
         # Device 정보 수집
@@ -86,6 +97,10 @@ def main():
             device_data=device_data,
             timestamp=timestamp
         )
+
+        # session_id가 존재하면 Event에 추가
+        if config.SESSION_ID:
+            event["session_id"] = config.SESSION_ID
 
         print("JSON 생성 완료")
 

@@ -1,4 +1,7 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || ""
+).replace(/\/$/, "");
+
 
 export class AuthApiError extends Error {
   constructor(message, status, details = null) {
@@ -8,6 +11,7 @@ export class AuthApiError extends Error {
     this.details = details;
   }
 }
+
 
 async function request(path, options = {}) {
   let response;
@@ -52,6 +56,7 @@ async function request(path, options = {}) {
   return body;
 }
 
+
 export function register(data) {
   return request("/api/auth/register", {
     method: "POST",
@@ -59,12 +64,43 @@ export function register(data) {
   });
 }
 
-export function login(data) {
-  return request("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+
+export async function login(data) {
+  const result = await request(
+    "/api/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!result?.access_token) {
+    throw new AuthApiError(
+      "로그인 응답에 access_token이 없습니다.",
+      500,
+      result
+    );
+  }
+
+  if (!result?.user) {
+    throw new AuthApiError(
+      "로그인 응답에 사용자 정보가 없습니다.",
+      500,
+      result
+    );
+  }
+
+  return {
+    access_token: result.access_token,
+    token_type: result.token_type || "bearer",
+
+    user: result.user,
+
+    // A 역할에서 로그인 Session 구현 후 반환
+    session_id: result.session_id || null,
+  };
 }
+
 
 export function getCurrentUser() {
   const token =

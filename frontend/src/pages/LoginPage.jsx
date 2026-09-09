@@ -1,28 +1,51 @@
 // 로그인 화면
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import {
+  useNavigate,
+  Link
+} from "react-router-dom";
 
-import { login as loginApi } from "../api/authApi.js";
-import { useAuth } from "../auth/AuthContext.jsx";
+import {
+  login as loginApi
+} from "../api/authApi.js";
+
+import {
+  useAuth
+} from "../auth/AuthContext.jsx";
+
 
 function LoginPage() {
   const navigate = useNavigate();
 
-  const { login: saveLogin } = useAuth();
+  const {
+    login: saveLogin
+  } = useAuth();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [password, setPassword] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     setError("");
 
-    if (!username.trim() || !password) {
-      setError("사용자명과 비밀번호를 입력해주세요.");
+    if (
+      !username.trim() ||
+      !password
+    ) {
+      setError(
+        "사용자명과 비밀번호를 입력해주세요."
+      );
       return;
     }
 
@@ -34,22 +57,24 @@ function LoginPage() {
         password,
       });
 
-      if (!result?.access_token) {
-        throw new Error("JWT가 반환되지 않았습니다.");
-      }
 
-      if (!result?.user) {
-        throw new Error("사용자 정보가 반환되지 않았습니다.");
-      }
-
-      // AuthContext에 로그인 정보 저장
+      // 로그인 정보 저장
       saveLogin(result);
 
-      // 개발/Agent 연동 테스트용
-      console.log(
-        "Agent 테스트용 access_token:",
-        result.access_token
-      );
+      // Agent / Session 정보 저장
+      if (result.session_id) {
+        localStorage.setItem(
+          "agent_session_id",
+          result.session_id
+        );
+      } else {
+        localStorage.removeItem(
+          "agent_session_id"
+        );
+      }
+
+
+      // 권한에 따른 페이지 이동
 
       if (result.user.role === "ADMIN") {
         navigate("/dashboard");
@@ -59,18 +84,22 @@ function LoginPage() {
 
     } catch (err) {
       setError(
-        err.message || "로그인에 실패했습니다."
+        err.message ||
+        "로그인에 실패했습니다."
       );
     } finally {
       setLoading(false);
     }
   };
 
+
   return (
     <main className="auth-page">
+
       <section className="auth-card">
 
         <div className="auth-header">
+
           <p className="auth-eyebrow">
             SECURE ACCESS
           </p>
@@ -82,47 +111,65 @@ function LoginPage() {
           <p className="auth-description">
             계정에 로그인하여 서비스를 이용하세요.
           </p>
+
         </div>
+
 
         <form
           className="auth-form"
           onSubmit={handleSubmit}
         >
+
           <label className="auth-field">
-            <span>사용자명</span>
+
+            <span>
+              사용자명
+            </span>
 
             <input
               type="text"
               value={username}
               onChange={(e) =>
-                setUsername(e.target.value)
+                setUsername(
+                  e.target.value
+                )
               }
               placeholder="사용자명을 입력하세요"
               disabled={loading}
               autoComplete="username"
             />
+
           </label>
 
+
           <label className="auth-field">
-            <span>비밀번호</span>
+
+            <span>
+              비밀번호
+            </span>
 
             <input
               type="password"
               value={password}
               onChange={(e) =>
-                setPassword(e.target.value)
+                setPassword(
+                  e.target.value
+                )
               }
               placeholder="비밀번호를 입력하세요"
               disabled={loading}
               autoComplete="current-password"
             />
+
           </label>
+
 
           {error && (
             <p className="auth-error">
               {error}
             </p>
           )}
+
 
           <button
             type="submit"
@@ -133,9 +180,12 @@ function LoginPage() {
               ? "로그인 중..."
               : "로그인"}
           </button>
+
         </form>
 
+
         <div className="auth-footer">
+
           <span>
             계정이 없나요?
           </span>
@@ -146,11 +196,14 @@ function LoginPage() {
           >
             회원가입
           </Link>
+
         </div>
 
       </section>
+
     </main>
   );
 }
+
 
 export default LoginPage;

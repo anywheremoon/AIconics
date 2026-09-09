@@ -25,12 +25,14 @@ export default function EventLogsPage() {
   const [appliedFilters, setAppliedFilters] =
     useState(INITIAL_FILTERS);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
 
   const [deletingId, setDeletingId] =
     useState(null);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   // 선택한 행동 로그
   const [selectedLog, setSelectedLog] =
@@ -56,6 +58,7 @@ export default function EventLogsPage() {
           "행동 로그 응답 형식이 올바르지 않습니다."
         );
       }
+
     } catch (requestError) {
       console.error(
         "행동 로그 조회 실패:",
@@ -66,8 +69,9 @@ export default function EventLogsPage() {
 
       setError(
         requestError.message ??
-          "행동 로그를 불러오지 못했습니다."
+        "행동 로그를 불러오지 못했습니다."
       );
+
     } finally {
       setLoading(false);
     }
@@ -102,10 +106,12 @@ export default function EventLogsPage() {
           searchUserId === "" ||
           logUserId.includes(searchUserId);
 
+
         const matchesRiskLevel =
           appliedFilters.riskLevel === "all" ||
           log.risk_level ===
             appliedFilters.riskLevel;
+
 
         const createdTime = log.created_at
           ? new Date(log.created_at).getTime()
@@ -125,6 +131,7 @@ export default function EventLogsPage() {
               ).getTime()
             : null;
 
+
         const matchesStartDate =
           startTime === null ||
           (
@@ -138,6 +145,7 @@ export default function EventLogsPage() {
             createdTime !== null &&
             createdTime <= endTime
           );
+
 
         return (
           matchesUserId &&
@@ -182,8 +190,7 @@ export default function EventLogsPage() {
     if (
       filters.startDate &&
       filters.endDate &&
-      filters.startDate >
-        filters.endDate
+      filters.startDate > filters.endDate
     ) {
       setError(
         "시작 날짜는 종료 날짜보다 늦을 수 없습니다."
@@ -252,6 +259,7 @@ export default function EventLogsPage() {
       if (selectedLog?.id === log.id) {
         setSelectedLog(null);
       }
+
     } catch (deleteError) {
       console.error(
         "행동 로그 삭제 실패:",
@@ -260,8 +268,9 @@ export default function EventLogsPage() {
 
       setError(
         deleteError.message ??
-          "행동 로그를 삭제하지 못했습니다."
+        "행동 로그를 삭제하지 못했습니다."
       );
+
     } finally {
       setDeletingId(null);
     }
@@ -275,14 +284,17 @@ export default function EventLogsPage() {
         {/* 페이지 상단 */}
         <div className="page-header">
           <div>
+
             <h1 className="page-title">
               행동 로그 조회
             </h1>
 
             <p className="page-description">
-              수집된 사용자 행동 데이터와
-              계산된 위험도를 확인합니다.
+              사용자 행동 데이터와
+              Behavior / Identity 위험도 및
+              탐지 사유를 확인합니다.
             </p>
+
           </div>
 
           <button
@@ -303,6 +315,7 @@ export default function EventLogsPage() {
           className="event-filter-card"
           onSubmit={handleSearch}
         >
+
           <label
             className="
               filter-field
@@ -381,6 +394,7 @@ export default function EventLogsPage() {
 
 
           <div className="event-filter-actions">
+
             <button
               type="submit"
               className="action-button"
@@ -395,6 +409,7 @@ export default function EventLogsPage() {
             >
               초기화
             </button>
+
           </div>
         </form>
 
@@ -447,6 +462,7 @@ export default function EventLogsPage() {
           <section className="event-detail-card">
 
             <div className="event-detail-header">
+
               <div>
                 <h2>
                   탐지 상세
@@ -458,6 +474,7 @@ export default function EventLogsPage() {
                 </p>
               </div>
 
+
               <button
                 type="button"
                 className="secondary-button"
@@ -467,6 +484,7 @@ export default function EventLogsPage() {
               >
                 닫기
               </button>
+
             </div>
 
 
@@ -479,8 +497,19 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.user_id ??
-                    "-"}
+                  {selectedLog.user_id ?? "-"}
+                </strong>
+              </div>
+
+
+              {/* Session */}
+              <div className="event-detail-item">
+                <span>
+                  Session ID
+                </span>
+
+                <strong>
+                  {selectedLog.session_id ?? "-"}
                 </strong>
               </div>
 
@@ -492,8 +521,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.device_id ??
-                    "-"}
+                  {selectedLog.device_id ?? "-"}
                 </strong>
               </div>
 
@@ -505,8 +533,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.location ??
-                    "-"}
+                  {selectedLog.location ?? "-"}
                 </strong>
               </div>
 
@@ -527,6 +554,18 @@ export default function EventLogsPage() {
               </div>
 
 
+              {/* Baseline 상태 */}
+              <div className="event-detail-item">
+                <span>
+                  Baseline 상태
+                </span>
+
+                <strong>
+                  {selectedLog.baseline_status ?? "-"}
+                </strong>
+              </div>
+
+
               {/* 타이핑 속도 */}
               <div className="event-detail-item">
                 <span>
@@ -534,8 +573,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.typing_speed ??
-                    "-"}
+                  {selectedLog.typing_speed ?? "-"}
                 </strong>
               </div>
 
@@ -547,8 +585,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.avg_hold_time ??
-                    "-"}
+                  {selectedLog.avg_hold_time ?? "-"}
                 </strong>
               </div>
 
@@ -560,8 +597,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.avg_flight_time ??
-                    "-"}
+                  {selectedLog.avg_flight_time ?? "-"}
                 </strong>
               </div>
 
@@ -573,8 +609,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.total_keystrokes ??
-                    "-"}
+                  {selectedLog.total_keystrokes ?? "-"}
                 </strong>
               </div>
 
@@ -586,8 +621,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.mouse_move_count ??
-                    "-"}
+                  {selectedLog.mouse_move_count ?? "-"}
                 </strong>
               </div>
 
@@ -599,8 +633,7 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.click_count ??
-                    "-"}
+                  {selectedLog.click_count ?? "-"}
                 </strong>
               </div>
 
@@ -635,15 +668,38 @@ export default function EventLogsPage() {
               </div>
 
 
-              {/* Risk Score */}
+              {/* Behavior Score */}
+              <div className="event-detail-item">
+                <span>
+                  Behavior Score
+                </span>
+
+                <strong>
+                  {selectedLog.behavior_score ?? "-"}
+                </strong>
+              </div>
+
+
+              {/* Identity Score */}
+              <div className="event-detail-item">
+                <span>
+                  Identity Score
+                </span>
+
+                <strong>
+                  {selectedLog.identity_score ?? "-"}
+                </strong>
+              </div>
+
+
+              {/* 기존 Risk Score */}
               <div className="event-detail-item">
                 <span>
                   Risk Score
                 </span>
 
                 <strong>
-                  {selectedLog.risk_score ??
-                    "-"}
+                  {selectedLog.risk_score ?? "-"}
                 </strong>
               </div>
 
@@ -655,12 +711,79 @@ export default function EventLogsPage() {
                 </span>
 
                 <strong>
-                  {selectedLog.risk_level ??
-                    "-"}
+                  {selectedLog.risk_level ?? "-"}
                 </strong>
               </div>
 
             </div>
+
+
+            {/* 탐지 사유 */}
+            <div className="event-detail-reasons">
+
+              <h3>
+                탐지 사유
+              </h3>
+
+              {Array.isArray(selectedLog.reasons) &&
+              selectedLog.reasons.length > 0 ? (
+
+                <ul className="event-reason-list">
+
+                  {selectedLog.reasons.map(
+                    (reason, index) => (
+
+                      <li
+                        key={
+                          reason.reason_code ??
+                          index
+                        }
+                      >
+
+                        <div>
+                          <strong>
+                            {reason.reason_code ??
+                              "UNKNOWN"}
+                          </strong>
+
+                          {reason.score_type && (
+                            <span>
+                              {" "}
+                              ({reason.score_type})
+                            </span>
+                          )}
+                        </div>
+
+
+                        <p>
+                          {reason.description ??
+                            "탐지 사유 정보가 없습니다."}
+                        </p>
+
+
+                        {reason.score_contribution != null && (
+                          <span>
+                            점수 기여도: +
+                            {reason.score_contribution}
+                          </span>
+                        )}
+
+                      </li>
+                    )
+                  )}
+
+                </ul>
+
+              ) : (
+
+                <p>
+                  탐지 사유가 없습니다.
+                </p>
+
+              )}
+
+            </div>
+
           </section>
         )}
 

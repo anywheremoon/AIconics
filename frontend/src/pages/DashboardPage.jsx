@@ -412,6 +412,26 @@ function normalizeEvents(payload) {
         return null;
       }
 
+      const behaviorScoreRaw =
+        event?.behavior_score ??
+        event?.behaviorScore;
+
+      const identityScoreRaw =
+        event?.identity_score ??
+        event?.identityScore;
+
+      const behaviorScore =
+        behaviorScoreRaw === null ||
+        behaviorScoreRaw === undefined
+          ? null
+          : Number(behaviorScoreRaw);
+
+      const identityScore =
+        identityScoreRaw === null ||
+        identityScoreRaw === undefined
+          ? null
+          : Number(identityScoreRaw);
+
       return {
         id:
           event?.id ??
@@ -419,6 +439,11 @@ function normalizeEvents(payload) {
 
         userId:
           String(userId),
+
+        sessionId:
+          event?.session_id ??
+          event?.sessionId ??
+          null,
 
         riskScore:
           Math.min(
@@ -435,7 +460,31 @@ function normalizeEvents(payload) {
 
         timestamp,
 
-        // 6단계 ML 이상 탐지 결과
+        // Behavior Score
+        behaviorScore:
+          Number.isFinite(behaviorScore)
+            ? behaviorScore
+            : null,
+
+        // Identity Score
+        identityScore:
+          Number.isFinite(identityScore)
+            ? identityScore
+            : null,
+
+        // Baseline 상태
+        baselineStatus:
+          event?.baseline_status ??
+          event?.baselineStatus ??
+          null,
+
+        // 탐지 사유
+        reasons:
+          Array.isArray(event?.reasons)
+            ? event.reasons
+            : [],
+
+        // ML 이상 탐지 결과
         detectAnomaly:
           Boolean(
             event?.detect_anomaly ??
@@ -483,6 +532,30 @@ function isToday(timestamp) {
 
 
 /**
+ * 평균 계산
+ */
+function calculateAverage(values) {
+  const validValues = values
+    .map((value) => Number(value))
+    .filter((value) =>
+      Number.isFinite(value)
+    );
+
+  if (validValues.length === 0) {
+    return null;
+  }
+
+  const sum = validValues.reduce(
+    (total, value) =>
+      total + value,
+    0
+  );
+
+  return sum / validValues.length;
+}
+
+
+/**
  * Dashboard 통계 계산
  */
 function calculateSummary(events) {
@@ -523,7 +596,11 @@ function calculateSummary(events) {
   // 위험 등급별 사용자 수
   const counts = users.reduce(
     (result, user) => {
-      result[user.riskLevel] += 1;
+      if (
+        result[user.riskLevel] !== undefined
+      ) {
+        result[user.riskLevel] += 1;
+      }
 
       return result;
     },
@@ -550,6 +627,26 @@ function calculateSummary(events) {
     ).length;
 
 
+  // 평균 Behavior Score
+  const averageBehaviorScore =
+    calculateAverage(
+      events.map(
+        (event) =>
+          event.behaviorScore
+      )
+    );
+
+
+  // 평균 Identity Score
+  const averageIdentityScore =
+    calculateAverage(
+      events.map(
+        (event) =>
+          event.identityScore
+      )
+    );
+
+
   return {
     total: users.length,
 
@@ -558,6 +655,10 @@ function calculateSummary(events) {
     todayEventCount,
 
     anomalyCount,
+
+    averageBehaviorScore,
+
+    averageIdentityScore,
   };
 }
 
@@ -655,7 +756,7 @@ function DashboardPage() {
 
 
   /**
-   * 6단계 Dashboard 카드
+   * Dashboard 카드
    */
   const cards = [
     {
@@ -731,6 +832,34 @@ function DashboardPage() {
 
       description:
         "One-Class SVM이 이상으로 판단한 이벤트",
+    },
+
+    {
+      title: "평균 Behavior Score",
+
+      value:
+        summary.averageBehaviorScore !== null
+          ? summary.averageBehaviorScore.toFixed(1)
+          : "-",
+
+      level: "neutral",
+
+      description:
+        "전체 행동 이벤트의 평균 Behavior 위험 점수",
+    },
+
+    {
+      title: "평균 Identity Score",
+
+      value:
+        summary.averageIdentityScore !== null
+          ? summary.averageIdentityScore.toFixed(1)
+          : "-",
+
+      level: "neutral",
+
+      description:
+        "전체 행동 이벤트의 평균 Identity 위험 점수",
     },
   ];
 
