@@ -65,6 +65,58 @@ export function register(data) {
 }
 
 
+// ==========================================
+// Agent 실제 Device 정보 조회
+// ==========================================
+export async function getAgentDeviceInfo() {
+  let response;
+
+  try {
+    response = await fetch(
+      "http://127.0.0.1:8765/device-info",
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+  } catch (error) {
+    throw new AuthApiError(
+      "Agent에서 기기 정보를 가져올 수 없습니다.",
+      0,
+      error
+    );
+  }
+
+  const body = await response
+    .json()
+    .catch(() => null);
+
+  if (!response.ok) {
+    throw new AuthApiError(
+      body?.error ||
+        "Agent 기기 정보 조회에 실패했습니다.",
+      response.status,
+      body
+    );
+  }
+
+  if (!body?.device_id) {
+    throw new AuthApiError(
+      "Agent 응답에 device_id가 없습니다.",
+      500,
+      body
+    );
+  }
+
+  return {
+    device_id: body.device_id,
+    location: body.location || null,
+  };
+}
+
+
 export async function login(data) {
   const result = await request(
     "/api/auth/login",
@@ -96,9 +148,79 @@ export async function login(data) {
 
     user: result.user,
 
-    // A 역할에서 로그인 Session 구현 후 반환
     session_id: result.session_id || null,
+
+    device_trust_status:
+      result.device_trust_status || null,
+
+    baseline_status:
+      result.baseline_status || null,
+
+    login_pattern:
+      result.login_pattern || null,
   };
+}
+
+
+// ==========================================
+// 로그인 후 JWT / Session ID를 Agent에 전달
+// ==========================================
+export async function sendAgentAuth(
+  accessToken,
+  sessionId
+) {
+  if (!accessToken || !sessionId) {
+    console.warn(
+      "Agent 인증 전달에 필요한 정보가 없습니다."
+    );
+
+    return false;
+  }
+
+  try {
+    const response = await fetch(
+      "http://127.0.0.1:8765/agent-auth",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          access_token: accessToken,
+          session_id: sessionId,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const body = await response
+        .json()
+        .catch(() => null);
+
+      console.warn(
+        "Agent 인증 전달 실패:",
+        body
+      );
+
+      return false;
+    }
+
+    console.log(
+      "Agent 인증정보 전달 완료"
+    );
+
+    return true;
+
+  } catch (error) {
+    console.warn(
+      "Agent 인증 서버에 연결할 수 없습니다.",
+      error
+    );
+
+    return false;
+  }
 }
 
 

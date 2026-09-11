@@ -1,15 +1,13 @@
 import os
 
 # API 설정
-
-API_URL = "http://localhost:8000/api/events"
+API_URL = "http://127.0.0.1:8000/api/events"
 
 SEND_INTERVAL = 30
 
 REQUEST_TIMEOUT = 5
 
 # Agent / Device 설정
-
 DEVICE_ID = "device01"
 LOCATION = "Seoul"
 

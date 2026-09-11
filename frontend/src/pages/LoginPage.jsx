@@ -1,12 +1,15 @@
 // 로그인 화면
 import { useState } from "react";
+
 import {
   useNavigate,
   Link
 } from "react-router-dom";
 
 import {
-  login as loginApi
+  login as loginApi,
+  sendAgentAuth,
+  getAgentDeviceInfo
 } from "../api/authApi.js";
 
 import {
@@ -46,48 +49,91 @@ function LoginPage() {
       setError(
         "사용자명과 비밀번호를 입력해주세요."
       );
+
       return;
     }
 
     setLoading(true);
 
     try {
+
+      // -----------------------------
+      // 1. Agent에서 현재 PC 정보 조회
+      // -----------------------------
+
+      const deviceInfo =
+        await getAgentDeviceInfo();
+
+      console.log(
+        "로그인 Device ID:",
+        deviceInfo.device_id
+      );
+
+
+      // -----------------------------
+      // 2. 서버 로그인
+      // 실제 device_id / location 전달
+      // -----------------------------
+
       const result = await loginApi({
         username: username.trim(),
         password,
+
+        device_id:
+          deviceInfo.device_id,
+
+        location:
+          deviceInfo.location,
       });
 
 
-      // 로그인 정보 저장
+      // -----------------------------
+      // 3. 로그인 정보 저장
+      // -----------------------------
+
       saveLogin(result);
 
-      // Agent / Session 정보 저장
-      if (result.session_id) {
-        localStorage.setItem(
-          "agent_session_id",
+
+      // -----------------------------
+      // 4. Agent 인증정보 자동 전달
+      // -----------------------------
+
+      const agentConnected =
+        await sendAgentAuth(
+          result.access_token,
           result.session_id
         );
-      } else {
-        localStorage.removeItem(
-          "agent_session_id"
+
+
+      if (!agentConnected) {
+        console.warn(
+          "Agent가 실행 중이지 않거나 인증정보 전달에 실패했습니다."
         );
       }
 
 
-      // 권한에 따른 페이지 이동
+      // -----------------------------
+      // 5. 권한에 따른 페이지 이동
+      // -----------------------------
 
-      if (result.user.role === "ADMIN") {
+      if (
+        result.user.role === "ADMIN"
+      ) {
         navigate("/dashboard");
+
       } else {
         navigate("/account");
       }
 
     } catch (err) {
+
       setError(
         err.message ||
         "로그인에 실패했습니다."
       );
+
     } finally {
+
       setLoading(false);
     }
   };
