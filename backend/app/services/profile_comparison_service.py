@@ -1,3 +1,6 @@
+import ipaddress
+
+
 def _relative_deviation(current, baseline):
     if baseline is None:
         return 0.0
@@ -11,7 +14,30 @@ def _relative_deviation(current, baseline):
     return abs(current - baseline) / abs(baseline)
 
 
-def compare_with_profile(profile, event):
+def _is_ip_changed(
+    current_ip: str | None,
+    usual_ip_subnet: str | None,
+) -> bool:
+    if not current_ip or not usual_ip_subnet:
+        return False
+
+    try:
+        address = ipaddress.ip_address(current_ip)
+        network = ipaddress.ip_network(
+            usual_ip_subnet,
+            strict=False,
+        )
+    except ValueError:
+        return False
+
+    return address not in network
+
+
+def compare_with_profile(
+    profile,
+    event,
+    current_ip: str | None = None,
+):
     """
     사용자의 기존 행동 baseline과 현재 이벤트를 비교한다.
     """
@@ -19,6 +45,7 @@ def compare_with_profile(profile, event):
     if profile is None:
         return {
             "new_device": False,
+            "ip_changed": False,
             "location_changed": False,
             "typing_deviation": 0.0,
             "hold_time_deviation": 0.0,
@@ -31,6 +58,11 @@ def compare_with_profile(profile, event):
     new_device = (
         profile.primary_device_id is not None
         and event.device_id != profile.primary_device_id
+    )
+
+    ip_changed = _is_ip_changed(
+        current_ip,
+        getattr(profile, "usual_ip_subnet", None),
     )
 
     location_changed = (
@@ -69,6 +101,9 @@ def compare_with_profile(profile, event):
     if new_device:
         score += 20
 
+    if ip_changed:
+        score += 10
+
     if location_changed:
         score += 15
 
@@ -87,11 +122,12 @@ def compare_with_profile(profile, event):
 
     return {
         "new_device": new_device,
+        "ip_changed": ip_changed,
         "location_changed": location_changed,
         "typing_deviation": typing_deviation,
         "hold_time_deviation": hold_time_deviation,
         "flight_time_deviation": flight_time_deviation,
         "mouse_deviation": mouse_deviation,
         "click_deviation": click_deviation,
-        "profile_deviation_score": min(score, 60),
+        "profile_deviation_score": min(score, 100),
     }

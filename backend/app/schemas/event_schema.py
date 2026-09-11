@@ -48,7 +48,15 @@ class EventResponse(BaseModel):
 
 class EventDetectionResponse(BaseModel):
     event_id: int
+
     risk_score: float
     risk_level: str
+
+    behavior_score: float
+    identity_score: float
+    baseline_status: str
+
+    reasons: list[dict]
+
     is_anomaly: bool
     profile_deviation_score: float
