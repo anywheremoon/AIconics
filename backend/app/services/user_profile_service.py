@@ -8,6 +8,8 @@ from app.repositories import user_profile_repository
 
 
 PROFILE_READY_EVENT_COUNT = 10
+BASELINE_INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+BASELINE_AVAILABLE = "AVAILABLE"
 BEHAVIOR_FIELDS = (
     "typing_speed",
     "avg_hold_time",
@@ -108,6 +110,16 @@ def is_profile_ready(
 ) -> bool:
     profile = get_user_baseline(db, user_id)
     return profile is not None and profile.event_count >= minimum_event_count
+
+
+def get_baseline_status(
+    db: Session,
+    user_id: int,
+    minimum_event_count: int = PROFILE_READY_EVENT_COUNT,
+) -> str:
+    if is_profile_ready(db, user_id, minimum_event_count):
+        return BASELINE_AVAILABLE
+    return BASELINE_INSUFFICIENT_DATA
 
 
 def update_profile_event_count(db: Session, user_id: int):

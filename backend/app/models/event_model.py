@@ -1,7 +1,19 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+)
 from sqlalchemy.sql import func
 
 from app.database import Base
+from app.models.device_model import Device  # noqa: F401
+from app.models.device_user_link_model import DeviceUserLink  # noqa: F401
+from app.models.user_session_model import UserSession  # noqa: F401
 
 
 class Event(Base):
@@ -9,38 +21,69 @@ class Event(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # 사용자 / 환경 정보
     user_id = Column(String, nullable=False, index=True)
+
+    session_id = Column(
+        String(36),
+        ForeignKey("user_sessions.session_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
     device_id = Column(String, nullable=False, index=True)
     ip_address = Column(String, nullable=False)
     location = Column(String, nullable=True)
 
-    # 키보드 행동 Feature
     typing_speed = Column(Float, nullable=False)
     avg_hold_time = Column(Float, nullable=False)
     avg_flight_time = Column(Float, nullable=False)
     total_keystrokes = Column(Integer, nullable=False)
 
-    # 마우스 행동 Feature
     mouse_move_count = Column(Integer, nullable=False)
     click_count = Column(Integer, nullable=False)
 
-    # 프로필 비교 결과
-    is_new_device = Column(Boolean, nullable=False, default=False)
+    is_new_device = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
     profile_deviation_score = Column(
         Float,
         nullable=False,
         default=0.0,
     )
 
-    # ML 탐지 결과
     detect_anomaly = Column(
         Boolean,
         nullable=False,
         default=False,
     )
 
-    # 최종 Risk Score
+    behavior_score = Column(
+        Float,
+        nullable=False,
+        default=0.0,
+    )
+
+    identity_score = Column(
+        Float,
+        nullable=False,
+        default=0.0,
+    )
+
+    baseline_status = Column(
+        String,
+        nullable=False,
+        default="INSUFFICIENT_DATA",
+    )
+
+    reasons = Column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
+
     risk_score = Column(Float, nullable=False)
     risk_level = Column(String, nullable=False)
 

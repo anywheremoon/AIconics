@@ -1,9 +1,14 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventCreate(BaseModel):
+    session_id: str = Field(
+        min_length=1,
+        max_length=36,
+    )
+
     device_id: str
     typing_speed: float
     avg_hold_time: float
@@ -19,6 +24,7 @@ class EventResponse(BaseModel):
 
     id: int
     user_id: str
+    session_id: str
     device_id: str
     ip_address: str
     location: str | None
@@ -42,7 +48,15 @@ class EventResponse(BaseModel):
 
 class EventDetectionResponse(BaseModel):
     event_id: int
+
     risk_score: float
     risk_level: str
+
+    behavior_score: float
+    identity_score: float
+    baseline_status: str
+
+    reasons: list[dict]
+
     is_anomaly: bool
     profile_deviation_score: float
