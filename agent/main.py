@@ -32,14 +32,24 @@ def collect_behavior_data(duration=30):
 
     results = {}
 
+
     def run_mouse():
-        results["mouse"] = collect_mouse(duration)
+        results["mouse"] = collect_mouse(
+            duration
+        )
+
 
     def run_click():
-        results["click"] = collect_click(duration)
+        results["click"] = collect_click(
+            duration
+        )
+
 
     def run_keyboard():
-        results["keyboard"] = collect_keyboard(duration)
+        results["keyboard"] = collect_keyboard(
+            duration
+        )
+
 
     mouse_thread = threading.Thread(
         target=run_mouse
@@ -53,13 +63,16 @@ def collect_behavior_data(duration=30):
         target=run_keyboard
     )
 
+
     mouse_thread.start()
     click_thread.start()
     keyboard_thread.start()
 
+
     mouse_thread.join()
     click_thread.join()
     keyboard_thread.join()
+
 
     behavior_data = {
         **results.get("mouse", {}),
@@ -67,75 +80,154 @@ def collect_behavior_data(duration=30):
         **results.get("keyboard", {})
     }
 
+
     return behavior_data
 
 
 def main():
 
     print("=" * 50)
-    print("Behavior Agent Started")
+
+    print(
+        "Behavior Agent Started"
+    )
+
     print("=" * 50)
 
-    # -------------------------------------------------
-    # 로그인 인증정보를 받을 로컬 서버 시작
-    # -------------------------------------------------
+
+    # ==========================================
+    # 로그인 인증정보를 받을
+    # 로컬 서버 시작
+    # ==========================================
 
     start_auth_receiver()
 
-    # -------------------------------------------------
-    # 프론트 로그인 정보 대기
-    # -------------------------------------------------
 
-    if not config.ACCESS_TOKEN:
-
-        print("사용자 로그인 인증정보를 기다리는 중...")
-
-        while not config.ACCESS_TOKEN:
-            time.sleep(1)
-
-    print("Agent 인증 완료")
-
-    if config.SESSION_ID:
-        print(
-            f"Session ID : {config.SESSION_ID}"
-        )
-    else:
-        print(
-            "Session ID가 설정되지 않았습니다."
-        )
-
-    # -------------------------------------------------
-    # 행동 데이터 지속 수집
-    # -------------------------------------------------
+    # ==========================================
+    # 로그인 상태에서만 행동 데이터 수집
+    # ==========================================
 
     while True:
 
-        print("\n행동 데이터 수집 중...")
 
-        behavior_data = collect_behavior_data(
-            duration=config.SEND_INTERVAL
+        # --------------------------------------
+        # 로그인 여부 확인
+        # --------------------------------------
+
+        if not config.ACCESS_TOKEN:
+
+            print(
+                "사용자 로그인 인증정보를 "
+                "기다리는 중..."
+            )
+
+            time.sleep(1)
+
+            continue
+
+
+        # --------------------------------------
+        # Session 확인
+        # --------------------------------------
+
+        if not config.SESSION_ID:
+
+            print(
+                "Session ID를 기다리는 중..."
+            )
+
+            time.sleep(1)
+
+            continue
+
+
+        print(
+            "\nAgent 인증 완료"
         )
 
+        print(
+            f"Session ID : "
+            f"{config.SESSION_ID}"
+        )
+
+
+        # --------------------------------------
+        # 행동 데이터 수집
+        # --------------------------------------
+
+        print(
+            "\n행동 데이터 수집 중..."
+        )
+
+
+        behavior_data = (
+            collect_behavior_data(
+                duration=config.SEND_INTERVAL
+            )
+        )
+
+
+        # --------------------------------------
+        # 수집 중 로그아웃 여부 확인
+        # --------------------------------------
+
+        if not config.ACCESS_TOKEN:
+
+            print(
+                "로그아웃 감지 - "
+                "수집한 데이터는 "
+                "전송하지 않습니다."
+            )
+
+            continue
+
+
+        if not config.SESSION_ID:
+
+            print(
+                "Session 종료 감지 - "
+                "수집한 데이터는 "
+                "전송하지 않습니다."
+            )
+
+            continue
+
+
+        # --------------------------------------
         # Device 정보
+        # --------------------------------------
+
         device_data = get_device_info()
 
+
+        # --------------------------------------
         # 시간
+        # --------------------------------------
+
         timestamp = get_timestamp()
 
+
+        # --------------------------------------
         # Event JSON 생성
+        # --------------------------------------
+
         event = create_event(
             behavior_data=behavior_data,
             device_data=device_data,
             timestamp=timestamp
         )
 
-        # 현재 로그인 Session 연결
-        if config.SESSION_ID:
-            event["session_id"] = (
-                config.SESSION_ID
-            )
 
-        print("JSON 생성 완료")
+        # 현재 로그인 Session 연결
+        event["session_id"] = (
+            config.SESSION_ID
+        )
+
+
+        print(
+            "JSON 생성 완료"
+        )
+
 
         print(
             json.dumps(
@@ -145,16 +237,46 @@ def main():
             )
         )
 
-        # 서버 전송
-        success = send_event(event)
+
+        # --------------------------------------
+        # 전송 직전 로그인 상태 재확인
+        # --------------------------------------
+
+        if not config.ACCESS_TOKEN:
+
+            print(
+                "로그아웃 감지 - "
+                "서버 전송을 중단합니다."
+            )
+
+            continue
+
+
+        # --------------------------------------
+        # Backend 전송
+        # --------------------------------------
+
+        success = send_event(
+            event
+        )
+
 
         if success:
-            print("서버 전송 완료")
+
+            print(
+                "서버 전송 완료"
+            )
+
         else:
-            print("서버 전송 실패")
+
+            print(
+                "서버 전송 실패"
+            )
+
 
         print(
-            "다음 행동 데이터를 수집합니다."
+            "다음 행동 데이터를 "
+            "수집합니다."
         )
 
 

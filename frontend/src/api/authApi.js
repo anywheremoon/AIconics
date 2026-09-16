@@ -68,32 +68,42 @@ export function register(data) {
 // ==========================================
 // Agent 실제 Device 정보 조회
 // ==========================================
+
 export async function getAgentDeviceInfo() {
+
   let response;
 
   try {
+
     response = await fetch(
       "http://127.0.0.1:8765/device-info",
       {
         method: "GET",
+
         headers: {
           Accept: "application/json",
         },
       }
     );
+
   } catch (error) {
+
     throw new AuthApiError(
-      "Agent에서 기기 정보를 가져올 수 없습니다.",
+      "Agent에서 기기 정보를 "
+        + "가져올 수 없습니다.",
       0,
       error
     );
   }
 
+
   const body = await response
     .json()
     .catch(() => null);
 
+
   if (!response.ok) {
+
     throw new AuthApiError(
       body?.error ||
         "Agent 기기 정보 조회에 실패했습니다.",
@@ -102,13 +112,16 @@ export async function getAgentDeviceInfo() {
     );
   }
 
+
   if (!body?.device_id) {
+
     throw new AuthApiError(
       "Agent 응답에 device_id가 없습니다.",
       500,
       body
     );
   }
+
 
   return {
     device_id: body.device_id,
@@ -117,7 +130,12 @@ export async function getAgentDeviceInfo() {
 }
 
 
+// ==========================================
+// 로그인
+// ==========================================
+
 export async function login(data) {
+
   const result = await request(
     "/api/auth/login",
     {
@@ -126,7 +144,9 @@ export async function login(data) {
     }
   );
 
+
   if (!result?.access_token) {
+
     throw new AuthApiError(
       "로그인 응답에 access_token이 없습니다.",
       500,
@@ -134,7 +154,9 @@ export async function login(data) {
     );
   }
 
+
   if (!result?.user) {
+
     throw new AuthApiError(
       "로그인 응답에 사용자 정보가 없습니다.",
       500,
@@ -142,13 +164,19 @@ export async function login(data) {
     );
   }
 
+
   return {
-    access_token: result.access_token,
-    token_type: result.token_type || "bearer",
+    access_token:
+      result.access_token,
 
-    user: result.user,
+    token_type:
+      result.token_type || "bearer",
 
-    session_id: result.session_id || null,
+    user:
+      result.user,
+
+    session_id:
+      result.session_id || null,
 
     device_trust_status:
       result.device_trust_status || null,
@@ -163,28 +191,36 @@ export async function login(data) {
 
 
 // ==========================================
-// 로그인 후 JWT / Session ID를 Agent에 전달
+// 로그인 후 JWT / Session ID를
+// Agent에 전달
 // ==========================================
+
 export async function sendAgentAuth(
   accessToken,
   sessionId
 ) {
+
   if (!accessToken || !sessionId) {
+
     console.warn(
-      "Agent 인증 전달에 필요한 정보가 없습니다."
+      "Agent 인증 전달에 필요한 "
+        + "정보가 없습니다."
     );
 
     return false;
   }
 
+
   try {
+
     const response = await fetch(
       "http://127.0.0.1:8765/agent-auth",
       {
         method: "POST",
 
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type":
+            "application/json",
         },
 
         body: JSON.stringify({
@@ -194,10 +230,13 @@ export async function sendAgentAuth(
       }
     );
 
+
     if (!response.ok) {
+
       const body = await response
         .json()
         .catch(() => null);
+
 
       console.warn(
         "Agent 인증 전달 실패:",
@@ -207,15 +246,19 @@ export async function sendAgentAuth(
       return false;
     }
 
+
     console.log(
       "Agent 인증정보 전달 완료"
     );
 
     return true;
 
+
   } catch (error) {
+
     console.warn(
-      "Agent 인증 서버에 연결할 수 없습니다.",
+      "Agent 인증 서버에 "
+        + "연결할 수 없습니다.",
       error
     );
 
@@ -224,21 +267,92 @@ export async function sendAgentAuth(
 }
 
 
+// ==========================================
+// 로그아웃 후 Agent 인증정보 제거
+// ==========================================
+
+export async function clearAgentAuth() {
+
+  try {
+
+    const response = await fetch(
+      "http://127.0.0.1:8765/agent-auth",
+      {
+        method: "DELETE",
+
+        headers: {
+          Accept: "application/json",
+        },
+      }
+    );
+
+
+    if (!response.ok) {
+
+      const body = await response
+        .json()
+        .catch(() => null);
+
+
+      console.warn(
+        "Agent 로그아웃 전달 실패:",
+        body
+      );
+
+      return false;
+    }
+
+
+    console.log(
+      "Agent 인증정보 제거 완료"
+    );
+
+    return true;
+
+
+  } catch (error) {
+
+    console.warn(
+      "Agent 인증 서버에 "
+        + "연결할 수 없습니다.",
+      error
+    );
+
+    return false;
+  }
+}
+
+
+// ==========================================
+// 현재 사용자 조회
+// ==========================================
+
 export function getCurrentUser() {
+
   const token =
-    localStorage.getItem("access_token");
+    localStorage.getItem(
+      "access_token"
+    );
+
 
   if (!token) {
+
     throw new AuthApiError(
       "로그인이 필요합니다.",
       401
     );
   }
 
-  return request("/api/auth/me", {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+
+  return request(
+    "/api/auth/me",
+    {
+      method: "GET",
+
+      headers: {
+        Authorization:
+          `Bearer ${token}`,
+      },
+    }
+  );
 }

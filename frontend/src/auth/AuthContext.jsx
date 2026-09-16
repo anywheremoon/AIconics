@@ -6,41 +6,68 @@ import {
 } from "react";
 
 import {
-  getCurrentUser
+  getCurrentUser,
+  sendAgentAuth,
+  clearAgentAuth
 } from "../api/authApi.js";
 
 
-const AuthContext = createContext(null);
+const AuthContext =
+  createContext(null);
 
 
-export function AuthProvider({ children }) {
+export function AuthProvider({
+  children
+}) {
 
-  const [token, setToken] = useState(
-    localStorage.getItem("access_token")
-  );
+  const [token, setToken] =
+    useState(
+      localStorage.getItem(
+        "access_token"
+      )
+    );
 
-  const [sessionId, setSessionId] = useState(
-    localStorage.getItem("session_id")
-  );
 
-  const [user, setUser] = useState(null);
+  const [sessionId, setSessionId] =
+    useState(
+      localStorage.getItem(
+        "session_id"
+      )
+    );
 
-  const [loading, setLoading] = useState(true);
 
+  const [user, setUser] =
+    useState(null);
+
+
+  const [loading, setLoading] =
+    useState(true);
+
+
+  // ==========================================
+  // 로그인 상태 복원
+  // ==========================================
 
   useEffect(() => {
 
     const restoreLogin = async () => {
 
       const savedToken =
-        localStorage.getItem("access_token");
+        localStorage.getItem(
+          "access_token"
+        );
+
 
       const savedSessionId =
-        localStorage.getItem("session_id");
+        localStorage.getItem(
+          "session_id"
+        );
 
 
       if (!savedToken) {
+
         setLoading(false);
+
         return;
       }
 
@@ -50,13 +77,35 @@ export function AuthProvider({ children }) {
         const currentUser =
           await getCurrentUser();
 
-        setToken(savedToken);
+
+        setToken(
+          savedToken
+        );
+
 
         setSessionId(
           savedSessionId || null
         );
 
-        setUser(currentUser);
+
+        setUser(
+          currentUser
+        );
+
+
+        // 브라우저 새로고침 또는
+        // Agent 재실행 시 인증정보 재전달
+        if (
+          savedToken &&
+          savedSessionId
+        ) {
+
+          await sendAgentAuth(
+            savedToken,
+            savedSessionId
+          );
+        }
+
 
       } catch (error) {
 
@@ -68,15 +117,18 @@ export function AuthProvider({ children }) {
           "session_id"
         );
 
+
         setToken(null);
+
         setSessionId(null);
+
         setUser(null);
+
 
       } finally {
 
         setLoading(false);
       }
-
     };
 
 
@@ -85,13 +137,20 @@ export function AuthProvider({ children }) {
   }, []);
 
 
-  const saveLogin = (result) => {
+  // ==========================================
+  // 로그인 성공 처리
+  // ==========================================
+
+  const saveLogin = async (
+    result
+  ) => {
 
     // JWT 저장
     localStorage.setItem(
       "access_token",
       result.access_token
     );
+
 
     setToken(
       result.access_token
@@ -106,6 +165,7 @@ export function AuthProvider({ children }) {
         result.session_id
       );
 
+
       setSessionId(
         result.session_id
       );
@@ -116,6 +176,7 @@ export function AuthProvider({ children }) {
         "session_id"
       );
 
+
       setSessionId(null);
     }
 
@@ -124,11 +185,36 @@ export function AuthProvider({ children }) {
     setUser(
       result.user
     );
+
+
+    // --------------------------------------
+    // Agent에 인증정보 전달
+    // --------------------------------------
+
+    if (
+      result.access_token &&
+      result.session_id
+    ) {
+
+      await sendAgentAuth(
+        result.access_token,
+        result.session_id
+      );
+    }
   };
 
 
-  const logout = () => {
+  // ==========================================
+  // 로그아웃
+  // ==========================================
 
+  const logout = async () => {
+
+    // Agent 인증정보 먼저 제거
+    await clearAgentAuth();
+
+
+    // Frontend 인증정보 제거
     localStorage.removeItem(
       "access_token"
     );
@@ -137,8 +223,11 @@ export function AuthProvider({ children }) {
       "session_id"
     );
 
+
     setToken(null);
+
     setSessionId(null);
+
     setUser(null);
   };
 
@@ -161,5 +250,8 @@ export function AuthProvider({ children }) {
 
 
 export function useAuth() {
-  return useContext(AuthContext);
+
+  return useContext(
+    AuthContext
+  );
 }

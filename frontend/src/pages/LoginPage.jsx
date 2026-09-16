@@ -8,7 +8,6 @@ import {
 
 import {
   login as loginApi,
-  sendAgentAuth,
   getAgentDeviceInfo
 } from "../api/authApi.js";
 
@@ -89,31 +88,15 @@ function LoginPage() {
 
       // -----------------------------
       // 3. 로그인 정보 저장
+      // + Agent 인증정보 전달
+      // AuthContext에서 처리
       // -----------------------------
 
-      saveLogin(result);
-
-
-      // -----------------------------
-      // 4. Agent 인증정보 자동 전달
-      // -----------------------------
-
-      const agentConnected =
-        await sendAgentAuth(
-          result.access_token,
-          result.session_id
-        );
-
-
-      if (!agentConnected) {
-        console.warn(
-          "Agent가 실행 중이지 않거나 인증정보 전달에 실패했습니다."
-        );
-      }
+      await saveLogin(result);
 
 
       // -----------------------------
-      // 5. 권한에 따른 페이지 이동
+      // 4. 권한에 따른 페이지 이동
       // -----------------------------
 
       if (

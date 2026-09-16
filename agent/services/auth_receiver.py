@@ -15,19 +15,28 @@ class AuthHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Origin",
             "http://localhost:5173"
         )
+
         self.send_header(
             "Access-Control-Allow-Methods",
-            "GET, POST, OPTIONS"
+            "GET, POST, DELETE, OPTIONS"
         )
+
         self.send_header(
             "Access-Control-Allow-Headers",
             "Content-Type"
         )
 
+    # ==========================================
+    # CORS Preflight
+    # ==========================================
     def do_OPTIONS(self):
+
         self.send_response(200)
+
         self._set_cors_headers()
+
         self.end_headers()
+
 
     # ==========================================
     # React에서 현재 PC의 device_id 조회
@@ -35,31 +44,50 @@ class AuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
 
         if self.path != "/device-info":
+
             self.send_response(404)
+
             self._set_cors_headers()
+
             self.end_headers()
+
             return
 
+
         try:
+
             device_info = get_device_info()
 
             response_data = {
-                "device_id": device_info["device_id"],
-                "location": config.LOCATION,
+                "device_id":
+                    device_info["device_id"],
+
+                "location":
+                    config.LOCATION,
             }
 
-            print("\nDevice 정보 요청 수신")
+
             print(
-                f"Device ID : {response_data['device_id']}"
+                "\nDevice 정보 요청 수신"
             )
 
+            print(
+                f"Device ID : "
+                f"{response_data['device_id']}"
+            )
+
+
             self.send_response(200)
+
             self._set_cors_headers()
+
             self.send_header(
                 "Content-Type",
                 "application/json"
             )
+
             self.end_headers()
+
 
             self.wfile.write(
                 json.dumps(
@@ -67,15 +95,20 @@ class AuthHandler(BaseHTTPRequestHandler):
                 ).encode("utf-8")
             )
 
+
         except Exception as e:
 
             self.send_response(500)
+
             self._set_cors_headers()
+
             self.send_header(
                 "Content-Type",
                 "application/json"
             )
+
             self.end_headers()
+
 
             self.wfile.write(
                 json.dumps({
@@ -83,16 +116,23 @@ class AuthHandler(BaseHTTPRequestHandler):
                 }).encode("utf-8")
             )
 
+
     # ==========================================
-    # React 로그인 후 JWT / session_id 수신
+    # React 로그인 후
+    # JWT / session_id 수신
     # ==========================================
     def do_POST(self):
 
         if self.path != "/agent-auth":
+
             self.send_response(404)
+
             self._set_cors_headers()
+
             self.end_headers()
+
             return
+
 
         content_length = int(
             self.headers.get(
@@ -101,14 +141,18 @@ class AuthHandler(BaseHTTPRequestHandler):
             )
         )
 
+
         body = self.rfile.read(
             content_length
         )
 
+
         try:
+
             data = json.loads(
                 body.decode("utf-8")
             )
+
 
             access_token = data.get(
                 "access_token"
@@ -118,17 +162,21 @@ class AuthHandler(BaseHTTPRequestHandler):
                 "session_id"
             )
 
+
             if not access_token:
+
                 raise ValueError(
                     "access_token이 없습니다."
                 )
 
+
             if not session_id:
+
                 raise ValueError(
                     "session_id가 없습니다."
                 )
 
-            # 혹시 모를 앞뒤 공백 제거
+
             access_token = (
                 access_token.strip()
             )
@@ -137,18 +185,21 @@ class AuthHandler(BaseHTTPRequestHandler):
                 session_id.strip()
             )
 
-            # Agent 설정에 저장
+
+            # Agent 인증정보 저장
             config.set_agent_auth(
                 access_token,
                 session_id
             )
+
 
             print(
                 "\nAgent 인증정보 수신 완료"
             )
 
             print(
-                f"Session ID : {session_id}"
+                f"Session ID : "
+                f"{session_id}"
             )
 
             # 토큰 전체는 출력하지 않음
@@ -167,21 +218,27 @@ class AuthHandler(BaseHTTPRequestHandler):
                 f"...{access_token[-20:]}"
             )
 
-            # --------------------------------
-            # 받은 JWT가 서버에서
-            # 유효한지 즉시 테스트
-            # --------------------------------
+
+            # ==================================
+            # 받은 JWT가 Backend에서
+            # 유효한지 확인
+            # ==================================
+
             try:
+
                 auth_test = requests.get(
                     "http://127.0.0.1:8000"
                     "/api/auth/me",
+
                     headers={
                         "Authorization":
                             f"Bearer "
                             f"{access_token}"
                     },
+
                     timeout=5
                 )
+
 
                 print(
                     "Agent JWT 검증 상태 :",
@@ -193,6 +250,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     auth_test.text
                 )
 
+
             except requests.RequestException as e:
 
                 print(
@@ -200,7 +258,9 @@ class AuthHandler(BaseHTTPRequestHandler):
                     e
                 )
 
+
             self.send_response(200)
+
             self._set_cors_headers()
 
             self.send_header(
@@ -209,6 +269,7 @@ class AuthHandler(BaseHTTPRequestHandler):
             )
 
             self.end_headers()
+
 
             self.wfile.write(
                 json.dumps({
@@ -216,9 +277,11 @@ class AuthHandler(BaseHTTPRequestHandler):
                 }).encode("utf-8")
             )
 
+
         except Exception as e:
 
             self.send_response(400)
+
             self._set_cors_headers()
 
             self.send_header(
@@ -227,6 +290,79 @@ class AuthHandler(BaseHTTPRequestHandler):
             )
 
             self.end_headers()
+
+
+            self.wfile.write(
+                json.dumps({
+                    "error": str(e)
+                }).encode("utf-8")
+            )
+
+
+    # ==========================================
+    # React 로그아웃 후
+    # Agent 인증정보 제거
+    # ==========================================
+    def do_DELETE(self):
+
+        if self.path != "/agent-auth":
+
+            self.send_response(404)
+
+            self._set_cors_headers()
+
+            self.end_headers()
+
+            return
+
+
+        try:
+
+            # Agent 인증정보 제거
+            config.clear_agent_auth()
+
+
+            print(
+                "\nAgent 로그아웃 정보 수신"
+            )
+
+            print(
+                "Agent 인증정보 제거 완료"
+            )
+
+
+            self.send_response(200)
+
+            self._set_cors_headers()
+
+            self.send_header(
+                "Content-Type",
+                "application/json"
+            )
+
+            self.end_headers()
+
+
+            self.wfile.write(
+                json.dumps({
+                    "status": "logged_out"
+                }).encode("utf-8")
+            )
+
+
+        except Exception as e:
+
+            self.send_response(500)
+
+            self._set_cors_headers()
+
+            self.send_header(
+                "Content-Type",
+                "application/json"
+            )
+
+            self.end_headers()
+
 
             self.wfile.write(
                 json.dumps({
@@ -242,12 +378,15 @@ def start_auth_receiver():
         AuthHandler
     )
 
+
     thread = threading.Thread(
         target=server.serve_forever,
         daemon=True
     )
 
+
     thread.start()
+
 
     print(
         "Agent 인증 수신 서버 시작: "
