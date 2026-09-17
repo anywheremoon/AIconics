@@ -8,8 +8,11 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.models.account_model import Account
+from app.models.event_model import Event
 from app.models.transaction_model import Transaction
 from app.models.user_model import User
+from app.models.device_model import Device
+from app.models.user_session_model import UserSession
 from app.services.auth_service import get_current_user
 from main import app
 
@@ -270,3 +273,132 @@ def test_duplicate_request_id_does_not_double_charge(client):
     assert transaction_count == 1
 
     db.close()
+
+def create_risk_event(user_id: int, risk_level: str, risk_score: float):
+    db = TestingSessionLocal()
+
+    device_id = f"test-device-{user_id}"
+    session_id = f"test-session-{user_id}"
+
+    device = Device(
+        device_id=device_id,
+    )
+    db.add(device)
+    db.flush()
+
+    session = UserSession(
+        session_id=session_id,
+        user_id=user_id,
+        device_id=device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+        device_trust_status="TRUSTED_DEVICE",
+        repeated_login_detected=False,
+        account_switch_detected=False,
+        recent_login_count=1,
+        recent_device_account_count=1,
+    )
+    db.add(session)
+    db.flush()
+
+    event = Event(
+        user_id=str(user_id),
+        session_id=session_id,
+        device_id=device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+
+        typing_speed=0,
+        avg_hold_time=0,
+        avg_flight_time=0,
+        total_keystrokes=0,
+        mouse_move_count=0,
+        click_count=0,
+
+        is_new_device=False,
+        profile_deviation_score=0,
+        detect_anomaly=False,
+
+        behavior_score=0,
+        identity_score=0,
+        baseline_status="AVAILABLE",
+        reasons=[],
+
+        risk_score=risk_score,
+        risk_level=risk_level,
+    )
+
+    db.add(event)
+    db.commit()
+    db.close()
+
+def test_low_risk_user_can_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "low-risk-user",
+        "101010101010",
+    )
+
+    create_user_with_account(
+        "recipient-low",
+        "202020202020",
+    )
+
+    create_risk_event(sender_id, "LOW", 20)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000101",
+            "recipient_account_number": "202020202020",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_medium_risk_user_cannot_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "medium-risk-user",
+        "303030303030",
+    )
+
+    create_user_with_account(
+        "recipient-medium",
+        "404040404040",
+    )
+
+    create_risk_event(sender_id, "MEDIUM", 50)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000102",
+            "recipient_account_number": "404040404040",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_high_risk_user_cannot_withdraw(client):
+    user_id, _ = create_user_with_account(
+        "high-risk-user",
+        "505050505050",
+    )
+
+    create_risk_event(user_id, "HIGH", 80)
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000103",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403

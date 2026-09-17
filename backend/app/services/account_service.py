@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.account_model import Account
+from app.models.event_model import Event
 from app.repositories import account_repository, transaction_repository
 
 
@@ -57,6 +58,23 @@ def _ensure_request_id_available(db: Session, request_id: str) -> None:
             detail="request_id was already processed",
         )
 
+def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
+    latest_event = (
+        db.query(Event)
+        .filter(Event.user_id == str(user_id))
+        .order_by(Event.created_at.desc(), Event.id.desc())
+        .first()
+    )
+
+    # 아직 Risk 데이터가 없는 사용자는 기존 거래 흐름 유지
+    if latest_event is None:
+        return
+
+    if latest_event.risk_level in ("MEDIUM", "HIGH"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="현재 위험도가 높아 거래가 제한되었습니다.",
+        )
 
 def list_my_transactions(db: Session, user_id: int):
     account = get_or_create_my_account(db, user_id)
@@ -95,6 +113,7 @@ def list_my_transactions(db: Session, user_id: int):
 
 
 def transfer(db: Session, user_id: int, data):
+    _ensure_transaction_allowed(db, user_id)
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
     _ensure_request_id_available(db, request_id)
@@ -132,6 +151,7 @@ def transfer(db: Session, user_id: int, data):
 
 
 def withdraw(db: Session, user_id: int, data):
+    _ensure_transaction_allowed(db, user_id)
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
     _ensure_request_id_available(db, request_id)
