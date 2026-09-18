@@ -1,4 +1,5 @@
 from app.ml.services.anomaly_detector import anomaly_detector
+from app.ml.preprocessing.feature_extractor import WINDOW_DOWN_COUNT
 
 
 def extract_ml_features(event_data: dict) -> list[float]:
@@ -20,6 +21,12 @@ def extract_ml_features(event_data: dict) -> list[float]:
 
     for feature_name in required_features:
         value = event_data.get(feature_name)
+
+        # The model was trained on fixed-size keystroke windows. Runtime
+        # events may contain a longer session, but the feature presented to
+        # the model must remain identical to the training representation.
+        if feature_name == "total_keystrokes" and value is not None:
+            value = WINDOW_DOWN_COUNT
 
         if value is None:
             raise ValueError(
