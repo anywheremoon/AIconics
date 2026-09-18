@@ -171,4 +171,4 @@ def withdraw(db: Session, user_id: int, data):
     )
     db.commit()
     db.refresh(transaction)
-    return transactions
+    return transaction

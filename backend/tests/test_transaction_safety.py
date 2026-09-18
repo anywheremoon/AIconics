@@ -402,3 +402,29 @@ def test_high_risk_user_cannot_withdraw(client):
     )
 
     assert response.status_code == 403
+
+
+def test_withdraw_returns_transaction_and_updates_balance(client):
+    user_id, account_id = create_user_with_account(
+        "withdraw-user",
+        "606060606060",
+        balance=100000,
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000104",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["transaction_type"] == "WITHDRAW"
+    assert response.json()["amount"] == "1000.00"
+
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    assert float(account.balance) == 99000.00
+    db.close()
