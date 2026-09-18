@@ -1,0 +1,551 @@
+from types import SimpleNamespace
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.database import Base, get_db
+from app.models.account_model import Account
+from app.models.event_model import Event
+from app.models.transaction_model import Transaction
+from app.models.user_model import User
+from app.models.device_model import Device
+from app.models.user_session_model import UserSession
+from app.services.auth_service import get_current_user
+from main import app
+
+
+TEST_DATABASE_URL = "sqlite://"
+
+engine = create_engine(
+    TEST_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+
+TestingSessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+
+@pytest.fixture(autouse=True)
+def setup_database():
+    Base.metadata.create_all(bind=engine)
+
+    yield
+
+    app.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def client():
+    def override_get_db():
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    return TestClient(app)
+
+
+def create_user_with_account(
+    username: str,
+    account_number: str,
+    balance=100000,
+):
+    db = TestingSessionLocal()
+
+    user = User(
+        username=username,
+        password_hash="test-password-hash",
+    )
+
+    db.add(user)
+    db.flush()
+
+    account = Account(
+        user_id=user.id,
+        account_number=account_number,
+        balance=balance,
+    )
+
+    db.add(account)
+    db.commit()
+
+    user_id = user.id
+    account_id = account.id
+
+    db.close()
+
+    return user_id, account_id
+
+
+def authenticate_as(user_id: int):
+    app.dependency_overrides[get_current_user] = (
+        lambda: SimpleNamespace(id=user_id)
+    )
+
+
+def test_insufficient_balance(client):
+    sender_id, sender_account_id = create_user_with_account(
+        "sender",
+        "111111111111",
+        balance=5000,
+    )
+
+    create_user_with_account(
+        "recipient",
+        "222222222222",
+        balance=100000,
+    )
+
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000003",
+            "recipient_account_number": "222222222222",
+            "amount": "10000.00",
+        },
+    )
+
+    assert response.status_code == 400
+
+    db = TestingSessionLocal()
+    sender = db.query(Account).filter(
+        Account.id == sender_account_id
+    ).first()
+
+    assert float(sender.balance) == 5000.00
+
+    db.close()
+
+
+def test_zero_amount_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "sender",
+        "333333333333",
+    )
+
+    create_user_with_account(
+        "recipient",
+        "444444444444",
+    )
+
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000004",
+            "recipient_account_number": "444444444444",
+            "amount": "0.00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_negative_amount_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "sender",
+        "555555555555",
+    )
+
+    create_user_with_account(
+        "recipient",
+        "666666666666",
+    )
+
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000005",
+            "recipient_account_number": "666666666666",
+            "amount": "-1000.00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_transfer_to_same_account(client):
+    user_id, _ = create_user_with_account(
+        "user01",
+        "777777777777",
+    )
+
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000006",
+            "recipient_account_number": "777777777777",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 400
+
+
+def test_transfer_to_nonexistent_account(client):
+    user_id, _ = create_user_with_account(
+        "user01",
+        "888888888888",
+    )
+
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000007",
+            "recipient_account_number": "999999999999",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_duplicate_request_id_does_not_double_charge(client):
+    sender_id, sender_account_id = create_user_with_account(
+        "sender",
+        "121212121212",
+        balance=100000,
+    )
+
+    _, recipient_account_id = create_user_with_account(
+        "recipient",
+        "343434343434",
+        balance=100000,
+    )
+
+    authenticate_as(sender_id)
+
+    request_data = {
+        "request_id": "00000000-0000-4000-8000-000000000008",
+        "recipient_account_number": "343434343434",
+        "amount": "10000.00",
+    }
+
+    first_response = client.post(
+        "/api/transactions/transfer",
+        json=request_data,
+    )
+
+    second_response = client.post(
+        "/api/transactions/transfer",
+        json=request_data,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+
+    db = TestingSessionLocal()
+
+    sender = db.query(Account).filter(
+        Account.id == sender_account_id
+    ).first()
+
+    recipient = db.query(Account).filter(
+        Account.id == recipient_account_id
+    ).first()
+
+    transaction_count = db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000008"
+    ).count()
+
+    assert float(sender.balance) == 90000.00
+    assert float(recipient.balance) == 110000.00
+    assert transaction_count == 1
+
+    db.close()
+
+def create_risk_event(user_id: int, risk_level: str, risk_score: float):
+    db = TestingSessionLocal()
+
+    device_id = f"test-device-{user_id}"
+    session_id = f"test-session-{user_id}"
+
+    device = Device(
+        device_id=device_id,
+    )
+    db.add(device)
+    db.flush()
+
+    session = UserSession(
+        session_id=session_id,
+        user_id=user_id,
+        device_id=device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+        device_trust_status="TRUSTED_DEVICE",
+        repeated_login_detected=False,
+        account_switch_detected=False,
+        recent_login_count=1,
+        recent_device_account_count=1,
+    )
+    db.add(session)
+    db.flush()
+
+    event = Event(
+        user_id=str(user_id),
+        session_id=session_id,
+        device_id=device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+
+        typing_speed=0,
+        avg_hold_time=0,
+        avg_flight_time=0,
+        total_keystrokes=0,
+        mouse_move_count=0,
+        click_count=0,
+
+        is_new_device=False,
+        profile_deviation_score=0,
+        detect_anomaly=False,
+
+        behavior_score=0,
+        identity_score=0,
+        baseline_status="AVAILABLE",
+        reasons=[],
+
+        risk_score=risk_score,
+        risk_level=risk_level,
+    )
+
+    db.add(event)
+    db.commit()
+    db.close()
+
+def test_low_risk_user_can_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "low-risk-user",
+        "101010101010",
+    )
+
+    create_user_with_account(
+        "recipient-low",
+        "202020202020",
+    )
+
+    create_risk_event(sender_id, "LOW", 20)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000101",
+            "recipient_account_number": "202020202020",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_medium_risk_user_cannot_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "medium-risk-user",
+        "303030303030",
+    )
+
+    create_user_with_account(
+        "recipient-medium",
+        "404040404040",
+    )
+
+    create_risk_event(sender_id, "MEDIUM", 50)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000102",
+            "recipient_account_number": "404040404040",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_high_risk_user_cannot_withdraw(client):
+    user_id, _ = create_user_with_account(
+        "high-risk-user",
+        "505050505050",
+    )
+
+    create_risk_event(user_id, "HIGH", 80)
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000103",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_withdraw_returns_transaction_and_updates_balance(client):
+    user_id, account_id = create_user_with_account(
+        "withdraw-user",
+        "606060606060",
+        balance=100000,
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000104",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["transaction_type"] == "WITHDRAW"
+    assert response.json()["amount"] == "1000.00"
+    assert response.json()["balance_after"] == "99000.00"
+
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    assert float(account.balance) == 99000.00
+    db.close()
+
+
+def test_withdraw_rejects_amount_greater_than_balance(client):
+    user_id, account_id = create_user_with_account(
+        "withdraw-insufficient",
+        "616161616161",
+        balance=100000,
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000105",
+            "amount": "200000.00",
+        },
+    )
+
+    assert response.status_code == 400
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    assert float(account.balance) == 100000.00
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000105"
+    ).count() == 0
+    db.close()
+
+
+@pytest.mark.parametrize("amount", ["0.00", "-1.00"])
+def test_withdraw_rejects_non_positive_amount(client, amount):
+    user_id, _ = create_user_with_account(
+        f"withdraw-invalid-{amount}",
+        "626262626262" if amount == "0.00" else "636363636363",
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000106",
+            "amount": amount,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_withdraw_rejects_user_without_account(client):
+    db = TestingSessionLocal()
+    user = User(username="no-account", password_hash="test-password-hash")
+    db.add(user)
+    db.commit()
+    user_id = user.id
+    db.close()
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000107",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_withdraw_requires_authentication(client):
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000108",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_inactive_account_cannot_withdraw(client):
+    user_id, account_id = create_user_with_account(
+        "inactive-account",
+        "646464646464",
+    )
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    account.status = "FROZEN"
+    db.commit()
+    db.close()
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000109",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_account_endpoint_returns_db_account_details(client):
+    user_id, _ = create_user_with_account(
+        "account-owner",
+        "656565656565",
+        balance=123456,
+    )
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id,
+        username="account-owner",
+    )
+
+    response = client.get("/api/accounts/me")
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "account-owner"
+    assert response.json()["account_number"] == "656565656565"
+    assert response.json()["balance"] == "123456.00"
+    assert response.json()["status"] == "ACTIVE"
