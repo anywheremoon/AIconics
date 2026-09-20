@@ -1,15 +1,23 @@
 import os
 
 
-# API 설정
-API_URL = "http://127.0.0.1:8000/api/events"
+# ==========================================
+# Backend API 설정
+# ==========================================
+
+BACKEND_URL = "http://192.168.35.93:8000"
+
+API_URL = f"{BACKEND_URL}/api/events"
 
 SEND_INTERVAL = 30
 
 REQUEST_TIMEOUT = 5
 
 
+# ==========================================
 # Agent / Device 설정
+# ==========================================
+
 DEVICE_ID = "device01"
 LOCATION = "Seoul"
 
@@ -18,7 +26,6 @@ LOCATION = "Seoul"
 # Agent 인증 정보
 # ==========================================
 
-# 기존 PowerShell 환경변수 테스트 방식도 지원
 ACCESS_TOKEN = os.getenv(
     "AGENT_ACCESS_TOKEN"
 )
