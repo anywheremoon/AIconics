@@ -109,6 +109,25 @@ def get_events(
 ):
     return db.query(Event).all()
 
+@router.get("/events/{event_id}")
+def get_event_detail(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_admin=Depends(require_admin),
+):
+    event = (
+        db.query(Event)
+        .filter(Event.id == event_id)
+        .first()
+    )
+
+    if event is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not found",
+        )
+
+    return event
 
 @router.get("/suspicious-users")
 def get_suspicious_users(

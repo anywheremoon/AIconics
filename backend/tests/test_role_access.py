@@ -7,6 +7,9 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.repositories import user_repository
 from app.services.auth_service import hash_password
+from app.models.device_model import Device
+from app.models.event_model import Event
+from app.models.user_session_model import UserSession
 from main import app
 
 
@@ -159,3 +162,100 @@ def test_admin_can_list_events(client, db):
 
     assert response.status_code == 200
     assert response.json() == []
+
+def test_user_cannot_get_event_detail(client, db):
+    user = create_user(db, "detail_user")
+    token = login(client, user.username).json()["access_token"]
+
+    response = client.get(
+        "/api/events/999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_admin_get_nonexistent_event_returns_404(client, db):
+    admin = create_user(db, "detail_admin", role="ADMIN")
+    token = login(client, admin.username).json()["access_token"]
+
+    response = client.get(
+        "/api/events/999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Event not found"
+
+def test_admin_can_get_event_detail(client, db):
+    admin = create_user(db, "event_admin", role="ADMIN")
+    token = login(client, admin.username).json()["access_token"]
+
+    device = Device(
+        device_id="detail-test-device",
+    )
+    db.add(device)
+    db.flush()
+
+    user_session = UserSession(
+        session_id="00000000-0000-4000-8000-000000000001",
+        user_id=admin.id,
+        device_id=device.device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+        device_trust_status="TRUSTED_DEVICE",
+        repeated_login_detected=False,
+        account_switch_detected=False,
+        recent_login_count=1,
+        recent_device_account_count=1,
+    )
+    db.add(user_session)
+    db.flush()
+
+    event = Event(
+        user_id=str(admin.id),
+        session_id=user_session.session_id,
+        device_id=device.device_id,
+        ip_address="127.0.0.1",
+        location="Seoul",
+        typing_speed=2.0,
+        avg_hold_time=100.0,
+        avg_flight_time=200.0,
+        total_keystrokes=20,
+        mouse_move_count=10,
+        click_count=2,
+        is_new_device=False,
+        profile_deviation_score=10.0,
+        detect_anomaly=False,
+        behavior_score=20.0,
+        identity_score=10.0,
+        baseline_status="AVAILABLE",
+        reasons=[],
+        risk_score=30.0,
+        risk_level="LOW",
+    )
+
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+
+    response = client.get(
+        f"/api/events/{event.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["id"] == event.id
+    assert body["session_id"] == user_session.session_id
+    assert body["device_id"] == "detail-test-device"
+    assert body["ip_address"] == "127.0.0.1"
+    assert body["behavior_score"] == 20.0
+    assert body["identity_score"] == 10.0
+    assert body["risk_score"] == 30.0
+    assert body["risk_level"] == "LOW"
+    assert body["baseline_status"] == "AVAILABLE"
+    assert body["detect_anomaly"] is False
+    assert body["reasons"] == []
