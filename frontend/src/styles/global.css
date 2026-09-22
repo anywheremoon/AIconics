@@ -584,6 +584,149 @@ select {
   background: #1d4ed8;
 }
 
+.action-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  padding: 8px 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+
+/* =========================================
+   계좌 / 송금 / 출금
+========================================= */
+
+.account-card {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: #eff6ff;
+}
+
+.account-card h2 {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.account-card strong {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.account-card p {
+  margin: 7px 0 0;
+  color: #172033;
+  font-weight: 700;
+}
+
+.account-actions {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0 32px;
+}
+
+.transaction-history h2 {
+  margin: 0 0 14px;
+}
+
+.transaction-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+}
+
+.transaction-table th,
+.transaction-table td {
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: center;
+}
+
+.transaction-table th {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.transaction-page .page-description {
+  margin-bottom: 24px;
+}
+
+.transaction-form {
+  width: 100%;
+  max-width: 560px;
+  margin: 20px 0;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.form-field label {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.form-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #172033;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-field input::placeholder {
+  color: #94a3b8;
+}
+
+.form-field input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.form-field input:disabled {
+  background: #f1f5f9;
+  cursor: not-allowed;
+}
+
+.transaction-form .action-button {
+  min-width: 110px;
+  height: 42px;
+  font-weight: 700;
+}
+
+.transaction-page-actions {
+  display: flex;
+  max-width: 560px;
+  justify-content: flex-end;
+}
+
 
 /* =========================================
    상태 메시지
@@ -896,6 +1039,10 @@ select {
 
   .nav-link {
     padding: 8px 12px;
+  }
+
+  .account-card {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

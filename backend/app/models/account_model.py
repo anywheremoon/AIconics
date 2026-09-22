@@ -17,4 +17,5 @@ class Account(Base):
     )
     account_number = Column(String(12), nullable=False, unique=True, index=True)
     balance = Column(Numeric(18, 2), nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="ACTIVE", server_default="ACTIVE")
     opened_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

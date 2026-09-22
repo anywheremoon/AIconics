@@ -59,6 +59,13 @@ function TransactionResultPage() {
             : "-"}
         </p>
 
+        {data.balanceAfter !== undefined && (
+          <p>
+            <strong>출금 후 잔액:</strong>{" "}
+            {Number(data.balanceAfter).toLocaleString("ko-KR")}원
+          </p>
+        )}
+
         {!data.success && (
           <p>
             <strong>실패 사유:</strong>{" "}

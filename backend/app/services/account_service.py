@@ -50,6 +50,16 @@ def get_or_create_my_account(db: Session, user_id: int):
         return account
 
 
+def get_my_account(db: Session, user_id: int) -> Account:
+    account = account_repository.find_by_user_id(db, user_id)
+    if account is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found",
+        )
+    return account
+
+
 def _ensure_request_id_available(db: Session, request_id: str) -> None:
     existing = transaction_repository.find_by_request_id(db, request_id)
     if existing is not None:
@@ -77,7 +87,7 @@ def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
         )
 
 def list_my_transactions(db: Session, user_id: int):
-    account = get_or_create_my_account(db, user_id)
+    account = get_my_account(db, user_id)
     transactions = transaction_repository.list_for_account(db, account.id)
     account_numbers = {
         item.id: item.account_number
@@ -152,11 +162,19 @@ def transfer(db: Session, user_id: int, data):
 
 def withdraw(db: Session, user_id: int, data):
     _ensure_transaction_allowed(db, user_id)
-    sender = get_or_create_my_account(db, user_id)
+    sender = get_my_account(db, user_id)
     request_id = str(data.request_id)
     _ensure_request_id_available(db, request_id)
 
-    sender = account_repository.lock_by_ids(db, [sender.id])[0]
+    locked_accounts = account_repository.lock_by_ids(db, [sender.id])
+    if not locked_accounts:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sender = locked_accounts[0]
+    if sender.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Account ownership mismatch")
+    if sender.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Account is not active")
     if sender.balance < data.amount:
         raise HTTPException(status_code=400, detail="Insufficient balance")
 
@@ -171,4 +189,17 @@ def withdraw(db: Session, user_id: int, data):
     )
     db.commit()
     db.refresh(transaction)
-    return transaction
+    db.refresh(sender)
+    return {
+        "id": transaction.id,
+        "request_id": transaction.request_id,
+        "transaction_type": transaction.transaction_type,
+        "sender_account_id": transaction.sender_account_id,
+        "recipient_account_id": transaction.recipient_account_id,
+        "sender_account_number": sender.account_number,
+        "recipient_account_number": None,
+        "amount": transaction.amount,
+        "status": transaction.status,
+        "created_at": transaction.created_at,
+        "balance_after": sender.balance,
+    }

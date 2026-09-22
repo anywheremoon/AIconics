@@ -6,6 +6,7 @@ from app.schemas.transaction_schema import (
     TransactionResponse,
     TransferRequest,
     WithdrawRequest,
+    WithdrawResponse,
 )
 from app.services import account_service
 from app.services.auth_service import get_current_user
@@ -28,7 +29,7 @@ def transfer_money(
     return account_service.transfer(db, current_user.id, data)
 
 
-@router.post("/withdraw", response_model=TransactionResponse)
+@router.post("/withdraw", response_model=WithdrawResponse)
 def withdraw_money(
     data: WithdrawRequest,
     current_user=Depends(get_current_user),
