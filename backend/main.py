@@ -7,17 +7,20 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from starlette import status
 
-# DB 관련 import
 from app.database import Base, engine
 from app.models.event_model import Event
+from app.routes import (
+    accounts,
+    auth,
+    dashboard,
+    events,
+    risk_score,
+    transaction_risk,
+    transactions,
+    user_profiles,
+)
 
-# API 라우터
-from app.routes import risk_score, events
 
-
-# ================================
-# FastAPI 애플리케이션 생성
-# ================================
 app = FastAPI(
     title="Risk Scoring API",
     description="User behavior risk scoring server",
@@ -25,9 +28,6 @@ app = FastAPI(
 )
 
 
-# ================================
-# React 프론트엔드 CORS 허용
-# ================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -40,15 +40,12 @@ app.add_middleware(
 )
 
 
-# ================================
-# DB 테이블 생성
-# ================================
 logger = logging.getLogger(__name__)
 
 
 @app.on_event("startup")
 def initialize_database():
-    """PostgreSQL 연결이 가능할 때 DB 테이블을 생성한다."""
+    """Create database tables when PostgreSQL is available."""
     try:
         Base.metadata.create_all(bind=engine)
     except OperationalError as error:
@@ -58,16 +55,16 @@ def initialize_database():
         )
 
 
-# ================================
-# Router 등록
-# ================================
+app.include_router(auth.router)
+app.include_router(user_profiles.router)
+app.include_router(accounts.router)
+app.include_router(transactions.router)
 app.include_router(risk_score.router)
+app.include_router(transaction_risk.router)
 app.include_router(events.router)
+app.include_router(dashboard.router)
 
 
-# ================================
-# Health Check
-# ================================
 @app.get("/")
 def health_check():
     try:
@@ -88,9 +85,6 @@ def health_check():
     }
 
 
-# ================================
-# 프로그램 실행
-# ================================
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
@@ -98,4 +92,3 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
     )
-    

@@ -55,6 +55,21 @@ def test_insufficient_profile_does_not_affect_risk(_detect_anomaly):
     assert result["reasons"] == []
 
 
+@patch("app.services.risk_engine.detect_anomaly", side_effect=_normal_ml_result)
+def test_unknown_profile_status_does_not_enable_personal_baseline(_detect_anomaly):
+    result = calculate_risk_score(
+        EVENT_DATA,
+        PROFILE_ANOMALY,
+        baseline_status="LEARNING",
+    )
+
+    assert result["behavior_score"] == 0
+    assert result["identity_score"] == 0
+    assert result["risk_score"] == 0
+    assert result["profile_deviation_score"] == 0
+    assert result["reasons"] == []
+
+
 @patch("app.services.risk_engine.detect_anomaly", side_effect=_anomalous_ml_result)
 def test_insufficient_profile_keeps_ml_and_independent_rules(_detect_anomaly):
     result = calculate_risk_score(

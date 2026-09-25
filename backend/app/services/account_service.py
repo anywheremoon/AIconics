@@ -11,6 +11,8 @@ from app.repositories import account_repository, transaction_repository
 
 
 OPENING_BALANCE = Decimal("100000.00")
+TRANSACTION_BLOCKED_RISK_LEVELS = frozenset({"MEDIUM", "HIGH"})
+TRANSACTION_BLOCKED_RISK_SCORE = 40
 
 
 def _new_account_number(db: Session) -> str:
@@ -68,7 +70,14 @@ def _ensure_request_id_available(db: Session, request_id: str) -> None:
             detail="request_id was already processed",
         )
 
+
 def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
+    """Block a transaction when the user's latest event is medium/high risk.
+
+    Both the persisted level and score are checked. The score check prevents a
+    stale or inconsistent ``risk_level`` value from allowing a risky request.
+    Users without a risk event keep the existing transaction behavior.
+    """
     latest_event = (
         db.query(Event)
         .filter(Event.user_id == str(user_id))
@@ -76,15 +85,21 @@ def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
         .first()
     )
 
-    # 아직 Risk 데이터가 없는 사용자는 기존 거래 흐름 유지
     if latest_event is None:
         return
 
-    if latest_event.risk_level in ("MEDIUM", "HIGH"):
+    risk_level = (latest_event.risk_level or "").upper()
+    risk_score = float(latest_event.risk_score or 0)
+
+    if (
+        risk_level in TRANSACTION_BLOCKED_RISK_LEVELS
+        or risk_score >= TRANSACTION_BLOCKED_RISK_SCORE
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="현재 위험도가 높아 거래가 제한되었습니다.",
+            detail="Transaction blocked due to current risk level",
         )
+
 
 def list_my_transactions(db: Session, user_id: int):
     account = get_my_account(db, user_id)

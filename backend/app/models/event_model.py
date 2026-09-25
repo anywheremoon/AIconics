@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -48,6 +48,15 @@ class Event(Base):
         nullable=False,
         default=False,
     )
+
+    behavior_score = Column(Float, nullable=False, default=0.0)
+    identity_score = Column(Float, nullable=False, default=0.0)
+    baseline_status = Column(
+        String,
+        nullable=False,
+        default="INSUFFICIENT_DATA",
+    )
+    reasons = Column(JSON, nullable=False, default=list)
 
     # 최종 Risk Score
     risk_score = Column(Float, nullable=False)

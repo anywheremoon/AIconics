@@ -4,6 +4,7 @@ backend/venv/
 # Python cache
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Environment variables
 .env

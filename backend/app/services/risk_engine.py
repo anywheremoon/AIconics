@@ -1,63 +1,81 @@
+from app.services.behavior_risk_engine import calculate_behavior_score
+from app.services.identity_consistency_engine import calculate_identity_score
 from app.services.ml_engine import detect_anomaly
+from app.services.risk_explanation_service import build_reasons
 
 
-def calculate_risk_score(event_data):
+BASELINE_INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+BASELINE_AVAILABLE = "AVAILABLE"
 
-    score = 0
 
-    # 새 기기 +20점
-    if event_data.is_new_device:
-        score += 20
+def calculate_risk_score(
+    event_data,
+    profile_comparison: dict | None = None,
+    *,
+    device_trust_status: str = "TRUSTED_DEVICE",
+    repeated_login_detected: bool = False,
+    account_switch_detected: bool = False,
+    baseline_status: str = "AVAILABLE",
+):
+    """Calculate behavior, identity, and combined risk scores."""
+    comparison = profile_comparison or {}
 
-    # 위치 정보 없음 +15점
-    if not event_data.location:
-        score += 15
+    # A partial profile is still being learned and must not affect risk.
+    # ML and profile-independent identity rules remain active.
+    if baseline_status == BASELINE_AVAILABLE:
+        effective_comparison = comparison
+    else:
+        effective_comparison = {}
 
-    # 타이핑 속도 이상 +20점
-    if event_data.typing_speed < 80 or event_data.typing_speed > 300:
-        score += 20
+    if hasattr(event_data, "model_dump"):
+        event_dict = event_data.model_dump()
+    else:
+        event_dict = dict(event_data)
 
-    # 마우스 이동 부족 +10점
-    if event_data.mouse_move_count < 50:
-        score += 10
-
-    # 클릭 수 과다 +10점
-    if event_data.click_count > 100:
-        score += 10
-
-    # Pydantic 객체 → dict
-    event_dict = event_data.model_dump()
-
-    # ==========================
-    # ML 이상 탐지
-    # ==========================
     ml_result = detect_anomaly(event_dict)
+    behavior_result = calculate_behavior_score(effective_comparison, ml_result)
+    identity_result = calculate_identity_score(
+        device_trust_status=device_trust_status,
+        repeated_login_detected=repeated_login_detected,
+        account_switch_detected=account_switch_detected,
+        ip_changed=effective_comparison.get("ip_changed", False),
+        location_changed=effective_comparison.get("location_changed", False),
+        baseline_status=baseline_status,
+    )
 
-    print("ML 결과:", ml_result)
-    print("ML 반영 전 점수:", score)
+    behavior_score = behavior_result["behavior_score"]
+    identity_score = identity_result["identity_score"]
+    final_score = min(behavior_score + identity_score, 100)
 
-    if ml_result["is_anomaly"]:
-        score += 30
-
-    print("ML 반영 후 점수:", score)
-
-    # ==========================
-    # 최종 점수
-    # ==========================
-    final_score = min(score, 100)
+    contributions = {}
+    contributions.update(behavior_result.get("contributions", {}))
+    contributions.update(identity_result.get("contributions", {}))
+    reasons = build_reasons(
+        behavior_result.get("reason_codes", []),
+        identity_result.get("reason_codes", []),
+        contributions,
+    )
 
     return {
         "risk_score": final_score,
         "risk_level": get_risk_level(final_score),
+        "behavior_score": behavior_score,
+        "identity_score": identity_score,
+        "baseline_status": identity_result["baseline_status"],
+        "reasons": reasons,
         "is_anomaly": ml_result["is_anomaly"],
-        "ml_prediction": ml_result["prediction"],
-        "ml_decision_score": ml_result["decision_score"]
+        "ml_prediction": ml_result.get("prediction"),
+        "ml_decision_score": ml_result.get("decision_score"),
+        "profile_deviation_score": effective_comparison.get(
+            "profile_deviation_score",
+            0,
+        ),
     }
 
 
 def get_risk_level(score):
     if score >= 70:
         return "HIGH"
-    elif score >= 40:
+    if score >= 40:
         return "MEDIUM"
     return "LOW"
