@@ -22,7 +22,9 @@ def extract_ml_features(event_data: dict) -> list[float]:
     for feature_name in required_features:
         value = event_data.get(feature_name)
 
-        # Keep runtime input identical to the fixed window used for training.
+        # The model was trained on fixed-size keystroke windows. Runtime
+        # events may contain a longer session, but the feature presented to
+        # the model must remain identical to the training representation.
         if feature_name == "total_keystrokes" and value is not None:
             value = WINDOW_DOWN_COUNT
 

@@ -70,14 +70,8 @@ def _ensure_request_id_available(db: Session, request_id: str) -> None:
             detail="request_id was already processed",
         )
 
-
 def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
-    """Block a transaction when the user's latest event is medium/high risk.
-
-    Both the persisted level and score are checked. The score check prevents a
-    stale or inconsistent ``risk_level`` value from allowing a risky request.
-    Users without a risk event keep the existing transaction behavior.
-    """
+    """Block a transaction when the latest risk is medium or high."""
     latest_event = (
         db.query(Event)
         .filter(Event.user_id == str(user_id))
@@ -99,7 +93,6 @@ def _ensure_transaction_allowed(db: Session, user_id: int) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Transaction blocked due to current risk level",
         )
-
 
 def list_my_transactions(db: Session, user_id: int):
     account = get_my_account(db, user_id)

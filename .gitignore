@@ -4,7 +4,6 @@ backend/venv/
 # Python cache
 __pycache__/
 *.py[cod]
-.pytest_cache/
 
 # Environment variables
 .env
@@ -28,3 +27,5 @@ frontend/.vite/
 
 # Generic node
 node_modules/
+
+.pytest_cache/

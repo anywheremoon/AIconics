@@ -18,6 +18,7 @@ def calculate_risk_score(
     baseline_status: str = "AVAILABLE",
 ):
     """Calculate behavior, identity, and combined risk scores."""
+
     comparison = profile_comparison or {}
 
     # A partial profile is still being learned and must not affect risk.
@@ -33,7 +34,12 @@ def calculate_risk_score(
         event_dict = dict(event_data)
 
     ml_result = detect_anomaly(event_dict)
-    behavior_result = calculate_behavior_score(effective_comparison, ml_result)
+
+    behavior_result = calculate_behavior_score(
+        effective_comparison,
+        ml_result,
+    )
+
     identity_result = calculate_identity_score(
         device_trust_status=device_trust_status,
         repeated_login_detected=repeated_login_detected,
@@ -50,6 +56,7 @@ def calculate_risk_score(
     contributions = {}
     contributions.update(behavior_result.get("contributions", {}))
     contributions.update(identity_result.get("contributions", {}))
+
     reasons = build_reasons(
         behavior_result.get("reason_codes", []),
         identity_result.get("reason_codes", []),

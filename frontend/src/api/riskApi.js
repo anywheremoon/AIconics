@@ -1,56 +1,75 @@
-const API_BASE_URL = '';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 async function request(path, options = {}) {
-    try {
-        const response = await fetch(`${API_BASE_URL}${path}`, {
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
-            ...options,
-        });
+  const token =
+    localStorage.getItem("access_token");
 
-        if (!response.ok) {
-            let errorMessage = `API 요청 실패: ${response.status}`;
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      ...options,
 
-            try {
-                const errorData = await response.json();
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
 
-                if (errorData.detail) {
-                    errorMessage = errorData.detail;
-                }
-            } catch {
-                // JSON 오류 응답이 아니면 기본 메시지를 사용한다.
+        ...(token
+          ? {
+              Authorization:
+                `Bearer ${token}`,
             }
+          : {}),
 
-            throw new Error(errorMessage);
-        }
-
-        return await response.json();
-    } catch (error) {
-        console.error('API 요청 오류:', error);
-
-        if (error instanceof TypeError) {
-            throw new Error(
-                'API 요청에 실패했습니다. FastAPI 서버와 Vite 프록시 설정을 확인하세요.',
-            );
-        }
-
-        throw error;
+        ...options.headers,
+      },
     }
+  );
+
+  const data = await response
+    .json()
+    .catch(() => null);
+
+  if (response.status === 401) {
+    localStorage.removeItem(
+      "access_token"
+    );
+
+    throw new Error(
+      "로그인이 만료되었습니다. 다시 로그인해주세요."
+    );
+  }
+
+  if (response.status === 403) {
+    throw new Error(
+      "관리자 권한이 필요합니다."
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data?.detail ||
+        "요청 처리에 실패했습니다."
+    );
+  }
+
+  return data;
 }
 
 export function getEventLogs() {
-    return request('/api/events');
+  return request("/api/events");
 }
 
 export function getSuspiciousUsers() {
-    return request('/api/suspicious-users');
+  return request("/api/suspicious-users");
 }
 
 export function deleteEventLog(eventId) {
-    return request(`/api/events/${eventId}`, {
-        method: 'DELETE',
-    });
+  return request(`/api/events/${eventId}`, {
+    method: "DELETE",
+  });
+}
+
+// 관리자 대시보드 통계 조회
+export function getAdminDashboard() {
+  return request("/api/admin/dashboard");
 }
