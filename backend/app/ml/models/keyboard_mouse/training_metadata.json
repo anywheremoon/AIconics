@@ -1,0 +1,22 @@
+{
+  "feature_names": [
+    "typing_speed",
+    "avg_hold_time",
+    "avg_flight_time",
+    "total_keystrokes",
+    "mouse_move_count",
+    "mouse_move_distance",
+    "click_count"
+  ],
+  "collection_duration_seconds": 30,
+  "training_samples": 35,
+  "excluded_idle_samples": 6,
+  "training_normal_predictions": 25,
+  "training_anomaly_predictions": 10,
+  "evaluation": "training_data_only",
+  "model_parameters": {
+    "kernel": "rbf",
+    "gamma": "scale",
+    "nu": 0.05
+  }
+}

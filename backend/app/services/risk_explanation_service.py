@@ -46,6 +46,51 @@ REASON_MESSAGES = {
 }
 
 
+def merge_risk_reasons(
+    *reason_groups: list[dict],
+) -> list[dict]:
+    """
+    여러 위험 평가 결과의 reasons를 합친다.
+
+    같은 score_type과 reason_code가 반복되면 한 번만 남긴다.
+    같은 식별자의 사유가 서로 다른 내용을 가지면 오류를 발생시킨다.
+    """
+    merged = []
+    seen = {}
+
+    for group in reason_groups:
+        if not isinstance(group, list):
+            raise ValueError("위험 사유 묶음은 목록이어야 합니다.")
+
+        for reason in group:
+            if not isinstance(reason, dict):
+                raise ValueError("각 위험 사유는 객체여야 합니다.")
+
+            score_type = reason.get("score_type")
+            reason_code = reason.get("reason_code")
+
+            if not score_type or not reason_code:
+                raise ValueError(
+                    "score_type과 reason_code가 필요합니다."
+                )
+
+            key = (score_type, reason_code)
+
+            if key in seen:
+                if seen[key] != reason:
+                    raise ValueError(
+                        "같은 위험 사유에 서로 다른 내용이 있습니다: "
+                        f"{score_type}/{reason_code}"
+                    )
+                continue
+
+            copied = reason.copy()
+            seen[key] = copied
+            merged.append(copied)
+
+    return merged
+
+
 def build_reasons(
     behavior_reason_codes: list[str],
     identity_reason_codes: list[str],
@@ -55,7 +100,6 @@ def build_reasons(
     reason_code 목록을 관리자 화면/API에서 사용할 수 있는
     구조화된 판단 근거 목록으로 변환한다.
     """
-
     result = []
 
     for reason_code in behavior_reason_codes + identity_reason_codes:
@@ -76,4 +120,4 @@ def build_reasons(
             }
         )
 
-    return result
+    return merge_risk_reasons(result)
