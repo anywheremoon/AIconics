@@ -41,6 +41,11 @@ function AccountCard({ account }) {
       <h2>내 계좌</h2>
 
       <div>
+        <strong>사용자</strong>
+        <p>{account.username || "-"}</p>
+      </div>
+
+      <div>
         <strong>계좌번호</strong>
         <p>{formatAccountNumber(account.account_number)}</p>
       </div>
@@ -48,6 +53,11 @@ function AccountCard({ account }) {
       <div>
         <strong>현재 잔액</strong>
         <p>{formatMoney(account.balance)}</p>
+      </div>
+
+      <div>
+        <strong>계좌 상태</strong>
+        <p>{account.status === "ACTIVE" ? "정상" : account.status || "-"}</p>
       </div>
 
       <div>

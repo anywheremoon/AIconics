@@ -15,7 +15,7 @@ function TransactionHistoryTable({
   myAccountNumber,
 }) {
   if (!transactions.length) {
-    return <p>거래 내역이 없습니다.</p>;
+    return <p className="empty-message">거래 내역이 없습니다.</p>;
   }
 
   const getTransactionInfo = (transaction) => {
@@ -93,7 +93,7 @@ function TransactionHistoryTable({
   };
 
   return (
-    <table>
+    <table className="transaction-table">
       <thead>
         <tr>
           <th>거래 일시</th>

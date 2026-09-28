@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import RiskCard from "../components/RiskCard";
 import RiskLineChart from "../components/RiskLineChart";
-import { getEventLogs } from "../api/riskApi.js";
+
+import {
+  getEventLogs,
+  getAdminDashboard,
+} from "../api/riskApi.js";
 
 
 const DASHBOARD_STYLES = `
@@ -460,31 +464,26 @@ function normalizeEvents(payload) {
 
         timestamp,
 
-        // Behavior Score
         behaviorScore:
           Number.isFinite(behaviorScore)
             ? behaviorScore
             : null,
 
-        // Identity Score
         identityScore:
           Number.isFinite(identityScore)
             ? identityScore
             : null,
 
-        // Baseline 상태
         baselineStatus:
           event?.baseline_status ??
           event?.baselineStatus ??
           null,
 
-        // 탐지 사유
         reasons:
           Array.isArray(event?.reasons)
             ? event.reasons
             : [],
 
-        // ML 이상 탐지 결과
         detectAnomaly:
           Boolean(
             event?.detect_anomaly ??
@@ -493,7 +492,6 @@ function normalizeEvents(payload) {
               false
           ),
 
-        // 프로필 차이 점수
         profileDeviationScore:
           event?.profile_deviation_score ??
           event?.profileDeviationScore ??
@@ -557,6 +555,9 @@ function calculateAverage(values) {
 
 /**
  * Dashboard 통계 계산
+ *
+ * 정상/주의/위험 사용자는
+ * 사용자별 가장 최근 이벤트를 기준으로 계산
  */
 function calculateSummary(events) {
   const latestByUser = new Map();
@@ -587,13 +588,11 @@ function calculateSummary(events) {
   });
 
 
-  // 사용자별 가장 최근 이벤트
   const users = [
     ...latestByUser.values(),
   ];
 
 
-  // 위험 등급별 사용자 수
   const counts = users.reduce(
     (result, user) => {
       if (
@@ -612,14 +611,12 @@ function calculateSummary(events) {
   );
 
 
-  // 오늘 이벤트 수
   const todayEventCount =
     events.filter((event) =>
       isToday(event.timestamp)
     ).length;
 
 
-  // ML 이상 탐지 이벤트 수
   const anomalyCount =
     events.filter(
       (event) =>
@@ -627,7 +624,6 @@ function calculateSummary(events) {
     ).length;
 
 
-  // 평균 Behavior Score
   const averageBehaviorScore =
     calculateAverage(
       events.map(
@@ -637,7 +633,6 @@ function calculateSummary(events) {
     );
 
 
-  // 평균 Identity Score
   const averageIdentityScore =
     calculateAverage(
       events.map(
@@ -664,69 +659,139 @@ function calculateSummary(events) {
 
 
 function DashboardPage() {
+  /**
+   * /api/events 데이터
+   */
   const [events, setEvents] =
     useState([]);
+
+
+  /**
+   * /api/admin/dashboard 데이터
+   */
+  const [
+    dashboardStats,
+    setDashboardStats,
+  ] = useState(null);
+
 
   const [loading, setLoading] =
     useState(true);
 
+
   const [error, setError] =
     useState(null);
+
 
   const [reloadKey, setReloadKey] =
     useState(0);
 
 
   /**
-   * 행동 로그 조회
+   * Dashboard 데이터 조회
+   *
+   * 최초 진입:
+   * 로딩 화면 표시
+   *
+   * 이후:
+   * 5초마다 자동 갱신
    */
   useEffect(() => {
     let cancelled = false;
 
-    async function loadDashboard() {
-      setLoading(true);
+
+    async function loadDashboard(
+      showLoading = false
+    ) {
+
+      if (showLoading) {
+        setLoading(true);
+      }
+
       setError(null);
 
+
       try {
-        const payload =
-          await getEventLogs();
+        const [
+          eventPayload,
+          dashboardPayload,
+        ] = await Promise.all([
+          getEventLogs(),
+          getAdminDashboard(),
+        ]);
+
 
         if (!cancelled) {
+
           setEvents(
-            normalizeEvents(payload)
+            normalizeEvents(
+              eventPayload
+            )
+          );
+
+
+          setDashboardStats(
+            dashboardPayload
           );
         }
 
       } catch (requestError) {
 
         if (!cancelled) {
-          setEvents([]);
 
           setError(
             requestError?.message ||
-              "위험도 데이터를 불러오지 못했습니다."
+              "대시보드 데이터를 불러오지 못했습니다."
           );
         }
 
       } finally {
 
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          showLoading
+        ) {
           setLoading(false);
         }
       }
     }
 
-    loadDashboard();
 
+    /**
+     * 페이지 최초 진입 시
+     * 즉시 데이터 조회
+     */
+    loadDashboard(true);
+
+
+    /**
+     * 5초마다 자동 갱신
+     */
+    const intervalId =
+      setInterval(() => {
+
+        loadDashboard(false);
+
+      }, 5000);
+
+
+    /**
+     * Dashboard 페이지를 벗어나면
+     * polling 종료
+     */
     return () => {
       cancelled = true;
+
+      clearInterval(
+        intervalId
+      );
     };
 
   }, [reloadKey]);
 
 
   /**
-   * Dashboard 요약
+   * Event 기반 통계
    */
   const summary = useMemo(
     () => calculateSummary(events),
@@ -746,8 +811,10 @@ function DashboardPage() {
         )
         .map((event) => ({
           id: event.id,
+
           timestamp:
             event.timestamp,
+
           riskScore:
             event.riskScore,
         })),
@@ -763,13 +830,46 @@ function DashboardPage() {
       title: "전체 사용자",
 
       value:
-        `${summary.total.toLocaleString()}명`,
+        `${(
+          dashboardStats?.total_users ?? 0
+        ).toLocaleString()}명`,
 
       level: "neutral",
 
       description:
-        "지속 인증 분석 대상 전체 사용자",
+        "시스템에 등록된 전체 사용자",
     },
+
+
+    {
+      title: "전체 세션",
+
+      value:
+        `${(
+          dashboardStats?.total_sessions ?? 0
+        ).toLocaleString()}건`,
+
+      level: "neutral",
+
+      description:
+        "DB에 기록된 전체 로그인 세션",
+    },
+
+
+    {
+      title: "전체 이벤트",
+
+      value:
+        `${(
+          dashboardStats?.total_events ?? 0
+        ).toLocaleString()}건`,
+
+      level: "neutral",
+
+      description:
+        "Agent에서 수집된 전체 행동 이벤트",
+    },
+
 
     {
       title: "오늘 이벤트",
@@ -783,6 +883,66 @@ function DashboardPage() {
         "오늘 Agent에서 수집된 행동 이벤트",
     },
 
+
+    {
+      title: "위험 이벤트",
+
+      value:
+        `${(
+          dashboardStats?.risky_events ?? 0
+        ).toLocaleString()}건`,
+
+      level:
+        (
+          dashboardStats?.risky_events ??
+          0
+        ) > 0
+          ? "medium"
+          : "low",
+
+      description:
+        "Risk Score 40점 이상 이벤트",
+    },
+
+
+    {
+      title: "HIGH 위험 사용자",
+
+      value:
+        `${(
+          dashboardStats?.high_risk_users ??
+          0
+        ).toLocaleString()}명`,
+
+      level:
+        (
+          dashboardStats?.high_risk_users ??
+          0
+        ) > 0
+          ? "high"
+          : "low",
+
+      description:
+        "HIGH 위험 이벤트가 기록된 사용자",
+    },
+
+
+    {
+      title: "전체 거래",
+
+      value:
+        `${(
+          dashboardStats?.total_transactions ??
+          0
+        ).toLocaleString()}건`,
+
+      level: "neutral",
+
+      description:
+        "시스템에 기록된 전체 거래",
+    },
+
+
     {
       title: "정상 사용자",
 
@@ -792,8 +952,9 @@ function DashboardPage() {
       level: "low",
 
       description:
-        "Risk Score 40점 미만",
+        "최신 Risk Score 40점 미만",
     },
+
 
     {
       title: "주의 사용자",
@@ -804,8 +965,9 @@ function DashboardPage() {
       level: "medium",
 
       description:
-        "Risk Score 40점 이상 70점 미만",
+        "최신 Risk Score 40점 이상 70점 미만",
     },
+
 
     {
       title: "위험 사용자",
@@ -816,8 +978,9 @@ function DashboardPage() {
       level: "high",
 
       description:
-        "Risk Score 70점 이상",
+        "최신 Risk Score 70점 이상",
     },
+
 
     {
       title: "ML 이상 탐지",
@@ -834,12 +997,15 @@ function DashboardPage() {
         "One-Class SVM이 이상으로 판단한 이벤트",
     },
 
+
     {
       title: "평균 Behavior Score",
 
       value:
         summary.averageBehaviorScore !== null
-          ? summary.averageBehaviorScore.toFixed(1)
+          ? summary.averageBehaviorScore.toFixed(
+              1
+            )
           : "-",
 
       level: "neutral",
@@ -848,12 +1014,15 @@ function DashboardPage() {
         "전체 행동 이벤트의 평균 Behavior 위험 점수",
     },
 
+
     {
       title: "평균 Identity Score",
 
       value:
         summary.averageIdentityScore !== null
-          ? summary.averageIdentityScore.toFixed(1)
+          ? summary.averageIdentityScore.toFixed(
+              1
+            )
           : "-",
 
       level: "neutral",
@@ -901,7 +1070,7 @@ function DashboardPage() {
             role="status"
             aria-live="polite"
           >
-            위험도 데이터를 불러오는
+            대시보드 데이터를 불러오는
             중입니다…
           </div>
         )}
@@ -942,18 +1111,18 @@ function DashboardPage() {
               className="dashboard-empty"
               role="status"
             >
-              아직 분석된 사용자 데이터가
+              아직 분석된 행동 데이터가
               없습니다. Agent에서 이벤트가
-              수집되면 자동으로 표시됩니다.
+              수집되면 표시됩니다.
             </div>
 
           )}
 
 
-        {/* Risk Summary Cards */}
+        {/* Dashboard Summary Cards */}
         <section
           className="risk-card-container"
-          aria-label="위험도 요약"
+          aria-label="관리자 대시보드 요약"
         >
 
           {loading
@@ -963,13 +1132,14 @@ function DashboardPage() {
                   className="risk-card-skeleton"
                   key={card.title}
                 >
+
                   <RiskCard
                     title={card.title}
                     value="불러오는 중"
                     level="neutral"
-                    description=
-                      "데이터를 확인하고 있습니다."
+                    description="데이터를 확인하고 있습니다."
                   />
+
                 </div>
 
               ))

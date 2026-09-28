@@ -37,7 +37,6 @@ class AuthHandler(BaseHTTPRequestHandler):
 
         self.end_headers()
 
-
     # ==========================================
     # React에서 현재 PC의 device_id 조회
     # ==========================================
@@ -53,7 +52,6 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             return
 
-
         try:
 
             device_info = get_device_info()
@@ -66,7 +64,6 @@ class AuthHandler(BaseHTTPRequestHandler):
                     config.LOCATION,
             }
 
-
             print(
                 "\nDevice 정보 요청 수신"
             )
@@ -75,7 +72,6 @@ class AuthHandler(BaseHTTPRequestHandler):
                 f"Device ID : "
                 f"{response_data['device_id']}"
             )
-
 
             self.send_response(200)
 
@@ -88,13 +84,11 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps(
                     response_data
                 ).encode("utf-8")
             )
-
 
         except Exception as e:
 
@@ -109,13 +103,11 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps({
                     "error": str(e)
                 }).encode("utf-8")
             )
-
 
     # ==========================================
     # React 로그인 후
@@ -133,7 +125,6 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             return
 
-
         content_length = int(
             self.headers.get(
                 "Content-Length",
@@ -141,18 +132,15 @@ class AuthHandler(BaseHTTPRequestHandler):
             )
         )
 
-
         body = self.rfile.read(
             content_length
         )
-
 
         try:
 
             data = json.loads(
                 body.decode("utf-8")
             )
-
 
             access_token = data.get(
                 "access_token"
@@ -162,20 +150,17 @@ class AuthHandler(BaseHTTPRequestHandler):
                 "session_id"
             )
 
-
             if not access_token:
 
                 raise ValueError(
                     "access_token이 없습니다."
                 )
 
-
             if not session_id:
 
                 raise ValueError(
                     "session_id가 없습니다."
                 )
-
 
             access_token = (
                 access_token.strip()
@@ -185,13 +170,13 @@ class AuthHandler(BaseHTTPRequestHandler):
                 session_id.strip()
             )
 
-
+            # ==================================
             # Agent 인증정보 저장
+            # ==================================
             config.set_agent_auth(
                 access_token,
                 session_id
             )
-
 
             print(
                 "\nAgent 인증정보 수신 완료"
@@ -218,27 +203,28 @@ class AuthHandler(BaseHTTPRequestHandler):
                 f"...{access_token[-20:]}"
             )
 
-
             # ==================================
-            # 받은 JWT가 Backend에서
+            # 받은 JWT가 중앙 Backend에서
             # 유효한지 확인
+            #
+            # 기존:
+            # http://127.0.0.1:8000/api/auth/me
+            #
+            # 변경:
+            # config.BACKEND_URL 사용
             # ==================================
-
             try:
 
                 auth_test = requests.get(
-                    "http://127.0.0.1:8000"
-                    "/api/auth/me",
+                    f"{config.BACKEND_URL}/api/auth/me",
 
                     headers={
                         "Authorization":
-                            f"Bearer "
-                            f"{access_token}"
+                            f"Bearer {access_token}"
                     },
 
-                    timeout=5
+                    timeout=config.REQUEST_TIMEOUT
                 )
-
 
                 print(
                     "Agent JWT 검증 상태 :",
@@ -250,14 +236,12 @@ class AuthHandler(BaseHTTPRequestHandler):
                     auth_test.text
                 )
 
-
             except requests.RequestException as e:
 
                 print(
                     "Agent JWT 검증 요청 실패 :",
                     e
                 )
-
 
             self.send_response(200)
 
@@ -270,13 +254,11 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps({
                     "status": "ok"
                 }).encode("utf-8")
             )
-
 
         except Exception as e:
 
@@ -291,13 +273,11 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps({
                     "error": str(e)
                 }).encode("utf-8")
             )
-
 
     # ==========================================
     # React 로그아웃 후
@@ -315,12 +295,10 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             return
 
-
         try:
 
             # Agent 인증정보 제거
             config.clear_agent_auth()
-
 
             print(
                 "\nAgent 로그아웃 정보 수신"
@@ -329,7 +307,6 @@ class AuthHandler(BaseHTTPRequestHandler):
             print(
                 "Agent 인증정보 제거 완료"
             )
-
 
             self.send_response(200)
 
@@ -342,13 +319,11 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps({
                     "status": "logged_out"
                 }).encode("utf-8")
             )
-
 
         except Exception as e:
 
@@ -363,7 +338,6 @@ class AuthHandler(BaseHTTPRequestHandler):
 
             self.end_headers()
 
-
             self.wfile.write(
                 json.dumps({
                     "error": str(e)
@@ -373,20 +347,23 @@ class AuthHandler(BaseHTTPRequestHandler):
 
 def start_auth_receiver():
 
+    # ==========================================
+    # 이 주소는 변경하지 않음
+    #
+    # React와 Agent는 같은 사용자 PC에서
+    # 실행되므로 localhost로 통신
+    # ==========================================
     server = HTTPServer(
         ("127.0.0.1", 8765),
         AuthHandler
     )
-
 
     thread = threading.Thread(
         target=server.serve_forever,
         daemon=True
     )
 
-
     thread.start()
-
 
     print(
         "Agent 인증 수신 서버 시작: "

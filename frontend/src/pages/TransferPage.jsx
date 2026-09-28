@@ -1,44 +1,46 @@
-//이체 화면 구현
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { getMyAccount } from "../api/accountApi.js";
 import { transferMoney } from "../api/transactionApi.js";
 import TransferForm from "../components/TransferForm.jsx";
 
 function TransferPage() {
   const navigate = useNavigate();
-
+  const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [accountLoading, setAccountLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const handleTransfer = async (formData) => {
-    if (loading) {
-      return;
-    }
+  useEffect(() => {
+    getMyAccount()
+      .then(setAccount)
+      .catch((err) => setError(err.message || "계좌 정보를 불러오지 못했습니다."))
+      .finally(() => setAccountLoading(false));
+  }, []);
+
+  const handleTransfer = async ({ recipient_account_number, amount }) => {
+    if (loading) return;
 
     setLoading(true);
     setError("");
-
     const requestId = crypto.randomUUID();
 
-    const requestData = {
-      request_id: requestId,
-      recipient_account_number:
-        formData.recipient_account_number,
-      amount: String(formData.amount),
-    };
-
     try {
-      const result = await transferMoney(requestData);
+      const result = await transferMoney({
+        request_id: requestId,
+        recipient_account_number,
+        amount: String(amount),
+      });
 
       navigate("/transaction-result", {
         state: {
           success: true,
           type: "TRANSFER",
-          amount: formData.amount,
+          amount,
           requestId,
-          createdAt:
-            result?.created_at || new Date().toISOString(),
+          createdAt: result.created_at,
+          balanceAfter: result.balance_after,
           result,
         },
       });
@@ -50,23 +52,32 @@ function TransferPage() {
   };
 
   return (
-    <main>
-      <h1>계좌 이체</h1>
+    <main className="page-container transaction-page">
+      <h1 className="page-title">송금</h1>
+      <p className="page-description">
+        현재 잔액: {accountLoading
+          ? "조회 중..."
+          : `${Number(account?.balance ?? 0).toLocaleString("ko-KR")}원`}
+      </p>
 
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
 
       <TransferForm
         onSubmit={handleTransfer}
-        loading={loading}
+        loading={loading || accountLoading}
+        availableBalance={account?.balance}
       />
 
-      <button
-        type="button"
-        onClick={() => navigate("/account")}
-        disabled={loading}
-      >
-        취소
-      </button>
+      <div className="transaction-page-actions">
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => navigate("/account")}
+          disabled={loading}
+        >
+          취소
+        </button>
+      </div>
     </main>
   );
 }

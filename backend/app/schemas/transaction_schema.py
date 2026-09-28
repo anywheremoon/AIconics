@@ -29,3 +29,7 @@ class TransactionResponse(BaseModel):
     amount: Decimal
     status: str
     created_at: datetime
+
+
+class WithdrawResponse(TransactionResponse):
+    balance_after: Decimal

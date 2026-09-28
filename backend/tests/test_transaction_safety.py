@@ -423,8 +423,129 @@ def test_withdraw_returns_transaction_and_updates_balance(client):
     assert response.status_code == 200
     assert response.json()["transaction_type"] == "WITHDRAW"
     assert response.json()["amount"] == "1000.00"
+    assert response.json()["balance_after"] == "99000.00"
 
     db = TestingSessionLocal()
     account = db.query(Account).filter(Account.id == account_id).first()
     assert float(account.balance) == 99000.00
     db.close()
+
+
+def test_withdraw_rejects_amount_greater_than_balance(client):
+    user_id, account_id = create_user_with_account(
+        "withdraw-insufficient",
+        "616161616161",
+        balance=100000,
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000105",
+            "amount": "200000.00",
+        },
+    )
+
+    assert response.status_code == 400
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    assert float(account.balance) == 100000.00
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000105"
+    ).count() == 0
+    db.close()
+
+
+@pytest.mark.parametrize("amount", ["0.00", "-1.00"])
+def test_withdraw_rejects_non_positive_amount(client, amount):
+    user_id, _ = create_user_with_account(
+        f"withdraw-invalid-{amount}",
+        "626262626262" if amount == "0.00" else "636363636363",
+    )
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000106",
+            "amount": amount,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_withdraw_rejects_user_without_account(client):
+    db = TestingSessionLocal()
+    user = User(username="no-account", password_hash="test-password-hash")
+    db.add(user)
+    db.commit()
+    user_id = user.id
+    db.close()
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000107",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_withdraw_requires_authentication(client):
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000108",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_inactive_account_cannot_withdraw(client):
+    user_id, account_id = create_user_with_account(
+        "inactive-account",
+        "646464646464",
+    )
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
+    account.status = "FROZEN"
+    db.commit()
+    db.close()
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000109",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_account_endpoint_returns_db_account_details(client):
+    user_id, _ = create_user_with_account(
+        "account-owner",
+        "656565656565",
+        balance=123456,
+    )
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
+        id=user_id,
+        username="account-owner",
+    )
+
+    response = client.get("/api/accounts/me")
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "account-owner"
+    assert response.json()["account_number"] == "656565656565"
+    assert response.json()["balance"] == "123456.00"
+    assert response.json()["status"] == "ACTIVE"

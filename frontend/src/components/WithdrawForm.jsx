@@ -1,7 +1,7 @@
 //출금 입력 폼 구현
 import { useState } from "react";
 
-function WithdrawForm({ onSubmit, loading = false }) {
+function WithdrawForm({ onSubmit, loading = false, availableBalance }) {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
 
@@ -9,8 +9,18 @@ function WithdrawForm({ onSubmit, loading = false }) {
     e.preventDefault();
     setError("");
 
-    if (!amount || Number(amount) <= 0) {
+    const numericAmount = Number(amount);
+
+    if (!amount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
       setError("출금 금액은 0원보다 커야 합니다.");
+      return;
+    }
+
+    if (
+      availableBalance !== undefined &&
+      numericAmount > Number(availableBalance)
+    ) {
+      setError("출금 금액이 현재 잔액을 초과합니다.");
       return;
     }
 
@@ -20,12 +30,13 @@ function WithdrawForm({ onSubmit, loading = false }) {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <div>
-        <label>출금 금액</label>
+    <form className="transaction-form" onSubmit={handleSubmit}>
+      <div className="form-field">
+        <label htmlFor="withdraw-amount">출금 금액</label>
         <input
+          id="withdraw-amount"
           type="number"
-          min="1"
+          min="0.01"
           step="0.01"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -34,9 +45,9 @@ function WithdrawForm({ onSubmit, loading = false }) {
         />
       </div>
 
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
 
-      <button type="submit" disabled={loading}>
+      <button type="submit" className="action-button" disabled={loading}>
         {loading ? "출금 처리 중..." : "출금하기"}
       </button>
     </form>

@@ -1,187 +1,106 @@
-//계좌 화면 구현
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getMyAccount } from "../api/accountApi.js";
-import { useAuth } from "../auth/AuthContext.jsx";
+import { getTransactions } from "../api/transactionApi.js";
+import AccountCard from "../components/AccountCard.jsx";
+import TransactionHistoryTable from "../components/TransactionHistoryTable.jsx";
 
 function AccountPage() {
   const navigate = useNavigate();
-
-  const { user, logout } = useAuth();
-
   const [account, setAccount] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadAccount = useCallback(async () => {
+    setLoading(true);
+    setError("");
 
-    async function loadAccount() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const data = await getMyAccount();
-
-        if (!cancelled) {
-          setAccount(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setAccount(null);
-
-          setError(
-            err.message ||
-              "계좌 정보를 불러오지 못했습니다."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+    try {
+      const [accountData, transactionData] = await Promise.all([
+        getMyAccount(),
+        getTransactions(),
+      ]);
+      setAccount(accountData);
+      setTransactions(transactionData.slice(0, 10));
+    } catch (err) {
+      setAccount(null);
+      setTransactions([]);
+      setError(err.message || "계좌 정보를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    loadAccount();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
-
-  const handleTransfer = () => {
-    navigate("/transfer");
-  };
-
-  const handleWithdraw = () => {
-    navigate("/withdraw");
-  };
+  useEffect(() => {
+    loadAccount();
+  }, [loadAccount]);
 
   if (loading) {
     return (
       <main className="page-container">
-        <h1 className="page-title">
-          내 계좌
-        </h1>
-
-        <p>
-          계좌 정보를 불러오는 중입니다...
-        </p>
+        <h1 className="page-title">내 계좌</h1>
+        <p className="loading-message">계좌 정보를 불러오는 중입니다...</p>
       </main>
     );
   }
 
   return (
     <main className="page-container">
-      <div className="account-page">
-        <div className="account-header">
-          <div>
-            <h1 className="page-title">
-              내 계좌
-            </h1>
-
-            {user && (
-              <p className="page-description">
-                {user.username}님의 계좌입니다.
-              </p>
-            )}
-          </div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">내 계좌</h1>
+          <p className="page-description">
+            DB에 저장된 계좌 잔액과 최근 거래내역입니다.
+          </p>
         </div>
-
-        {error && (
-          <div
-            className="error-message"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
-
-        {!error && account && (
-          <>
-            <section className="account-card">
-              <div className="account-info-row">
-                <span className="account-label">
-                  계좌번호
-                </span>
-
-                <strong className="account-value">
-                  {account.account_number}
-                </strong>
-              </div>
-
-              <div className="account-info-row">
-                <span className="account-label">
-                  잔액
-                </span>
-
-                <strong className="account-balance">
-                  {Number(
-                    account.balance ?? 0
-                  ).toLocaleString()}
-                  원
-                </strong>
-              </div>
-
-              {account.opened_at && (
-                <div className="account-info-row">
-                  <span className="account-label">
-                    개설일
-                  </span>
-
-                  <span className="account-value">
-                    {new Date(
-                      account.opened_at
-                    ).toLocaleString()}
-                  </span>
-                </div>
-              )}
-            </section>
-
-            <div className="account-actions">
-              <button
-                type="button"
-                className="action-button"
-                onClick={handleTransfer}
-              >
-                송금
-              </button>
-
-              <button
-                type="button"
-                className="action-button"
-                onClick={handleWithdraw}
-              >
-                출금
-              </button>
-            </div>
-          </>
-        )}
-
-        {!loading &&
-          !error &&
-          !account && (
-            <p>
-              계좌 정보를 찾을 수 없습니다.
-            </p>
-          )}
-
-        <div className="account-footer">
-          <button
-            type="button"
-            className="action-button"
-            onClick={handleLogout}
-          >
-            로그아웃
-          </button>
-        </div>
+        <button type="button" className="secondary-button" onClick={loadAccount}>
+          새로고침
+        </button>
       </div>
+
+      {error && (
+        <div className="error-message" role="alert">
+          {error}
+        </div>
+      )}
+
+      {!error && account && (
+        <>
+          <AccountCard account={account} />
+
+          <div className="account-actions">
+            <button
+              type="button"
+              className="action-button"
+              onClick={() => navigate("/transfer")}
+              disabled={account.status !== "ACTIVE"}
+            >
+              송금
+            </button>
+            <button
+              type="button"
+              className="action-button"
+              onClick={() => navigate("/withdraw")}
+              disabled={account.status !== "ACTIVE"}
+            >
+              출금
+            </button>
+          </div>
+
+          <section className="transaction-history">
+            <h2>최근 거래내역</h2>
+            <div className="table-container">
+              <TransactionHistoryTable
+                transactions={transactions}
+                myAccountId={account.id}
+                myAccountNumber={account.account_number}
+              />
+            </div>
+          </section>
+        </>
+      )}
     </main>
   );
 }
