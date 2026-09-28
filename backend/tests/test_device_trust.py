@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base
 from app.models.user_model import User
+from app.repositories import device_repository
 from app.services.device_trust_service import (
     DeviceTrustStatus,
     assess_device,
@@ -77,6 +78,7 @@ def test_new_device_becomes_trusted_after_use():
 
     db.close()
 
+
 def test_device_becomes_shared_when_used_by_another_user():
     db = TestingSessionLocal()
 
@@ -92,7 +94,7 @@ def test_device_becomes_shared_when_used_by_another_user():
     )
     db.commit()
 
-    # 두 번째 사용자가 같은 기기를 처음 사용
+    # 두 번째 사용자가 같은 기기를 사용하려 하면 SHARED_DEVICE
     status_before = assess_device(
         db,
         user2.id,
@@ -100,5 +102,24 @@ def test_device_becomes_shared_when_used_by_another_user():
     )
 
     assert status_before == DeviceTrustStatus.SHARED_DEVICE
+
+    # 두 번째 사용자의 실제 기기 사용 기록
+    record_device_use(
+        db,
+        user2.id,
+        device_id,
+    )
+    db.commit()
+
+    # 같은 기기가 두 사용자 모두와 연결되었는지 확인
+    assert device_repository.find_user_link(
+        db, device_id, user1.id
+    ) is not None
+
+    assert device_repository.find_user_link(
+        db, device_id, user2.id
+    ) is not None
+
+    assert device_repository.count_users(db, device_id) == 2
 
     db.close()

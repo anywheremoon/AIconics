@@ -203,7 +203,7 @@ def test_admin_can_get_event_detail(client, db):
         device_id=device.device_id,
         ip_address="127.0.0.1",
         location="Seoul",
-        device_trust_status="TRUSTED_DEVICE",
+        device_trust_status="SHARED_DEVICE",
         repeated_login_detected=False,
         account_switch_detected=False,
         recent_login_count=1,
@@ -228,11 +228,18 @@ def test_admin_can_get_event_detail(client, db):
         profile_deviation_score=10.0,
         detect_anomaly=False,
         behavior_score=20.0,
-        identity_score=10.0,
+        identity_score=25.0,
         baseline_status="AVAILABLE",
-        reasons=[],
-        risk_score=30.0,
-        risk_level="LOW",
+        reasons=[
+            {
+              "reason_code": "SHARED_DEVICE",
+              "description": "shared device",
+              "score_type": "IDENTITY",
+              "score_contribution": 25,
+            }
+        ],
+        risk_score=45.0,
+        risk_level="MEDIUM",
     )
 
     db.add(event)
@@ -253,9 +260,16 @@ def test_admin_can_get_event_detail(client, db):
     assert body["device_id"] == "detail-test-device"
     assert body["ip_address"] == "127.0.0.1"
     assert body["behavior_score"] == 20.0
-    assert body["identity_score"] == 10.0
-    assert body["risk_score"] == 30.0
-    assert body["risk_level"] == "LOW"
+    assert body["identity_score"] == 25.0
+    assert body["risk_score"] == 45.0
+    assert body["risk_level"] == "MEDIUM"
     assert body["baseline_status"] == "AVAILABLE"
     assert body["detect_anomaly"] is False
-    assert body["reasons"] == []
+    assert body["reasons"] == [
+        {
+         "reason_code": "SHARED_DEVICE",
+        "description": "shared device",
+        "score_type": "IDENTITY",
+        "score_contribution": 25,
+        }
+    ]  
