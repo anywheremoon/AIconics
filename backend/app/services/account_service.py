@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.graph_sync_service import sync_transfer
 from app.models.account_model import Account
 from app.models.event_model import Event
 from app.repositories import account_repository, transaction_repository
@@ -157,6 +158,13 @@ def transfer(db: Session, user_id: int, data):
     )
     db.commit()
     db.refresh(transaction)
+
+    sync_transfer(
+        transaction,
+        sender,
+        recipient,
+    )
+
     return transaction
 
 

@@ -13,6 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.graph_sync_service import sync_login, sync_registration
 from app.database import get_db
 from app.models.login_history_model import LoginHistory
 from app.repositories import user_repository
@@ -141,14 +142,30 @@ def register_user(db: Session, data, ip_address: str | None = None):
     if user_repository.username_exists(db, data.username):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
     try:
-        user = user_repository.create_user(db, data.username, hash_password(data.password))
-        create_virtual_account(db, user.id)
-        user_profile_service.create_initial_profile(
-            db, user.id, data.device_id, ip_address, data.location
+        user = user_repository.create_user(
+            db,
+            data.username,
+            hash_password(data.password),
         )
+
+        account = create_virtual_account(db, user.id)
+
+        user_profile_service.create_initial_profile(
+            db,
+            user.id,
+            data.device_id,
+            ip_address,
+            data.location,
+        )
+
         db.commit()
         db.refresh(user)
+        db.refresh(account)
+
+        sync_registration(user, account)
+
         return user
+
     except IntegrityError as error:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists") from error
@@ -191,6 +208,13 @@ def login_user(
         )
     token = create_access_token(user.id)
     _save_login_history(db, user.id, device_id, ip_address, True)
+
+    sync_login(
+    user.id,
+    device_id,
+    ip_address,
+    )
+
     return {
         "access_token": token,
         "token_type": "bearer",
