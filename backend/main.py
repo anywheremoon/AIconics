@@ -11,6 +11,11 @@ from starlette import status
 from app.database import Base, engine
 from app.models.event_model import Event
 
+# 위험 평가 모델과 참조 대상 테이블 등록
+from app.models.transaction_model import Transaction
+from app.models.risk_assessment_model import RiskAssessment
+from app.models.risk_factor_model import RiskFactor
+
 # API 라우터
 from app.routes import (
     accounts,
@@ -18,6 +23,7 @@ from app.routes import (
     dashboard,
     events,
     graph,
+    risk_assessments,
     risk_score,
     transaction_risk,
     transactions,
@@ -75,6 +81,7 @@ app.include_router(auth.router)
 app.include_router(user_profiles.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
+app.include_router(risk_assessments.router)
 app.include_router(risk_score.router)
 app.include_router(transaction_risk.router)
 app.include_router(events.router)
