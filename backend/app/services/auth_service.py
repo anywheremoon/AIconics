@@ -14,10 +14,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.services.graph_sync_service import sync_login, sync_registration
+from app.services.graph_sync_service import sync_user_deletion
 from app.database import get_db
 from app.models.login_history_model import LoginHistory
+from app.models.user_session_model import UserSession
 from app.repositories import user_repository
 from app.services import user_profile_service
+from app.models.event_model import Event
 
 
 PASSWORD_ITERATIONS = 600_000
@@ -224,3 +227,25 @@ def login_user(
             "role": user.role,
         },
     }
+
+def delete_user_account(db: Session, user) -> None:
+    user_id = user.id
+
+    try:
+        db.query(Event).filter(
+            Event.user_id == str(user_id)
+        ).delete(synchronize_session=False)
+
+        db.query(UserSession).filter(
+            UserSession.user_id == user_id
+        ).delete(synchronize_session=False)
+
+        user_repository.delete_user(db, user)
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    sync_user_deletion(user_id)

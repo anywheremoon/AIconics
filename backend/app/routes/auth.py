@@ -89,3 +89,10 @@ def login(
 @router.get("/me", response_model=AuthenticatedUserResponse)
 def read_current_user(current_user=Depends(get_current_user)):
     return current_user
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_current_user(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    auth_service.delete_user_account(db, current_user)

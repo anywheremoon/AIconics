@@ -5,6 +5,7 @@ from app.graph.graph_repository import (
     merge_user_account,
     merge_user_device,
     merge_user_ip,
+    delete_user_graph,
 )
 
 
@@ -77,5 +78,17 @@ def sync_registration(user, account) -> bool:
         logger.exception(
             "Failed to sync registration for user %s to Neo4j",
             user.id,
+        )
+        return False
+
+def sync_user_deletion(user_id: int) -> bool:
+    try:
+        delete_user_graph(user_id)
+        return True
+
+    except Exception:
+        logger.exception(
+            "Failed to delete user %s from Neo4j",
+            user_id,
         )
         return False

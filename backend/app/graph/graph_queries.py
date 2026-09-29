@@ -118,3 +118,13 @@ RETURN
     recipient.account_number AS recipient_account_number,
     recipient_user.user_id AS recipient_user_id
 """
+
+DELETE_USER_ACCOUNTS = """
+MATCH (u:User {user_id: $user_id})-[:OWNS]->(a:Account)
+DETACH DELETE a
+"""
+
+DELETE_USER = """
+MATCH (u:User {user_id: $user_id})
+DETACH DELETE u
+"""

@@ -12,6 +12,8 @@ from app.graph.graph_queries import (
     MERGE_USER_ACCOUNT,
     MERGE_USER_DEVICE,
     MERGE_USER_IP,
+    DELETE_USER,
+    DELETE_USER_ACCOUNTS,
 )
 from app.graph.neo4j_client import driver
 
@@ -152,3 +154,14 @@ def get_transaction_graph(transaction_id: int) -> dict | None:
            data["created_at"] = data["created_at"].iso_format()
 
         return data
+
+def delete_user_graph(user_id: int):
+    _execute(
+        DELETE_USER_ACCOUNTS,
+        user_id=user_id,
+    )
+
+    return _execute(
+        DELETE_USER,
+        user_id=user_id,
+    )
