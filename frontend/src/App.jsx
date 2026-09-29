@@ -30,6 +30,8 @@ import AccountPage from "./pages/AccountPage.jsx";
 import TransferPage from "./pages/TransferPage.jsx";
 import WithdrawPage from "./pages/WithdrawPage.jsx";
 import TransactionResultPage from "./pages/TransactionResultPage.jsx";
+import TransactionPendingPage from "./pages/TransactionPendingPage.jsx";
+import VerificationPage from "./pages/VerificationPage.jsx";
 
 // 권한 없음 페이지
 import ForbiddenPage from "./pages/ForbiddenPage.jsx";
@@ -192,6 +194,24 @@ function AppRoutes() {
           element={
             <RequireAuth>
               <WithdrawPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/verification"
+          element={
+            <RequireAuth>
+              <VerificationPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/transaction-pending"
+          element={
+            <RequireAuth>
+              <TransactionPendingPage />
             </RequireAuth>
           }
         />

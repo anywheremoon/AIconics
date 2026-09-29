@@ -1,283 +1,200 @@
-import json
-import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import config
 
-# Device 정보
 from collectors.device_collector import get_device_info
-
-# 시간 함수
-from utils.time_utils import get_timestamp
-
-# 최종 Event JSON 생성
-from services.event_buffer import create_event
-
-# API 전송
-from services.api_sender import send_event
-
-# 로그인 인증정보 수신
-from services.auth_receiver import start_auth_receiver
-
-# 행동 데이터 수집
 from collectors.mouse_collector import collect_mouse
 from collectors.click_collector import collect_click
 from collectors.keyboard_collector import collect_keyboard
 
+from utils.time_utils import get_timestamp
 
-def collect_behavior_data(duration=30):
-    """
-    마우스, 클릭, 키보드 데이터를 동시에 수집
-    """
-
-    results = {}
-
-
-    def run_mouse():
-        results["mouse"] = collect_mouse(
-            duration
-        )
+from services.event_buffer import create_event
+from services.api_sender import send_event
+from services.auth_receiver import start_auth_receiver
+from services.training_data_logger import save_training_sample
 
 
-    def run_click():
-        results["click"] = collect_click(
-            duration
-        )
+def collect_behavior_data(duration, stop_event):
+    """마우스, 클릭, 키보드 데이터를 동시에 수집한다."""
 
+    if stop_event.is_set():
+        return None
 
-    def run_keyboard():
-        results["keyboard"] = collect_keyboard(
-            duration
-        )
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            "mouse": executor.submit(
+                collect_mouse,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+            "click": executor.submit(
+                collect_click,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+            "keyboard": executor.submit(
+                collect_keyboard,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+        }
 
+        # 수집기에서 예외가 발생하면 main으로 전달
+        results = {
+            name: future.result()
+            for name, future in futures.items()
+        }
 
-    mouse_thread = threading.Thread(
-        target=run_mouse
-    )
+    if stop_event.is_set():
+        return None
 
-    click_thread = threading.Thread(
-        target=run_click
-    )
+    if any(not result for result in results.values()):
+        raise RuntimeError("일부 수집기의 결과가 없습니다.")
 
-    keyboard_thread = threading.Thread(
-        target=run_keyboard
-    )
-
-
-    mouse_thread.start()
-    click_thread.start()
-    keyboard_thread.start()
-
-
-    mouse_thread.join()
-    click_thread.join()
-    keyboard_thread.join()
-
-
-    behavior_data = {
-        **results.get("mouse", {}),
-        **results.get("click", {}),
-        **results.get("keyboard", {})
+    return {
+        **results["mouse"],
+        **results["click"],
+        **results["keyboard"],
     }
 
 
-    return behavior_data
-
-
 def main():
-
     print("=" * 50)
-
-    print(
-        "Behavior Agent Started"
-    )
-
+    print("Behavior Agent Started")
     print("=" * 50)
-
-
-    # ==========================================
-    # 로그인 인증정보를 받을
-    # 로컬 서버 시작
-    # ==========================================
 
     start_auth_receiver()
 
+    waiting_logged = False
 
-    # ==========================================
-    # 로그인 상태에서만 행동 데이터 수집
-    # ==========================================
-
-    while True:
-
-
-        # --------------------------------------
-        # 로그인 여부 확인
-        # --------------------------------------
-
-        if not config.ACCESS_TOKEN:
-
-            print(
-                "사용자 로그인 인증정보를 "
-                "기다리는 중..."
+    try:
+        while True:
+            # 같은 시점의 인증정보와 중지 신호 확보
+            access_token, session_id, stop_event = (
+                config.get_auth_snapshot()
             )
 
-            time.sleep(1)
+            if (
+                not access_token
+                or not session_id
+                or stop_event.is_set()
+            ):
+                if not waiting_logged:
+                    print("사용자 로그인 인증정보를 기다리는 중...")
+                    waiting_logged = True
 
-            continue
+                time.sleep(0.2)
+                continue
 
+            waiting_logged = False
 
-        # --------------------------------------
-        # Session 확인
-        # --------------------------------------
+            print(f"\n행동 데이터 수집 시작: {session_id}")
 
-        if not config.SESSION_ID:
+            try:
+                # 이번 수집에 사용할 시간을 고정
+                duration = config.SEND_INTERVAL
 
-            print(
-                "Session ID를 기다리는 중..."
-            )
+                behavior_data = collect_behavior_data(
+                    duration=duration,
+                    stop_event=stop_event,
+                )
 
-            time.sleep(1)
+                # 중단되었거나 인증 상태가 바뀌면 결과 폐기
+                if (
+                    behavior_data is None
+                    or not config.is_auth_current(
+                        access_token,
+                        session_id,
+                        stop_event,
+                    )
+                ):
+                    print(
+                        "로그아웃 또는 인증 상태 변경 - "
+                        "수집 결과를 폐기합니다."
+                    )
+                    continue
 
-            continue
+                # ==========================================
+                # 키보드 + 마우스 학습용 CSV 저장
+                # ==========================================
+                if config.SAVE_TRAINING_DATA:
+                    try:
+                        if config.is_auth_current(
+                            access_token,
+                            session_id,
+                            stop_event,
+                        ):
+                            saved_path = save_training_sample(
+                                behavior_data=behavior_data,
+                                duration=duration,
+                            )
 
+                            print(
+                                f"학습 데이터 CSV 저장: {saved_path}"
+                            )
 
-        print(
-            "\nAgent 인증 완료"
-        )
+                    except Exception as error:
+                        # CSV 저장 실패와 기존 이벤트 전송을 분리
+                        print(
+                            f"학습 데이터 저장 실패: {error}"
+                        )
 
-        print(
-            f"Session ID : "
-            f"{config.SESSION_ID}"
-        )
+                # CSV 저장 중 인증 상태가 변경되었는지 확인
+                if not config.is_auth_current(
+                    access_token,
+                    session_id,
+                    stop_event,
+                ):
+                    print(
+                        "로그아웃 또는 인증 상태 변경 - "
+                        "이벤트 전송을 취소합니다."
+                    )
+                    continue
 
+                # ==========================================
+                # Backend 전송용 이벤트 생성
+                # ==========================================
+                device_data = get_device_info()
+                timestamp = get_timestamp()
 
-        # --------------------------------------
-        # 행동 데이터 수집
-        # --------------------------------------
+                event = create_event(
+                    behavior_data=behavior_data,
+                    device_data=device_data,
+                    timestamp=timestamp,
+                )
 
-        print(
-            "\n행동 데이터 수집 중..."
-        )
+                # 수집 시작 당시의 세션 연결
+                event["session_id"] = session_id
 
+                # ==========================================
+                # Backend 전송
+                # ==========================================
+                success = send_event(
+                    event,
+                    access_token=access_token,
+                    session_id=session_id,
+                    stop_event=stop_event,
+                )
 
-        behavior_data = (
-            collect_behavior_data(
-                duration=config.SEND_INTERVAL
-            )
-        )
+                if success:
+                    print("서버 전송 완료")
+                else:
+                    print("서버 전송 취소 또는 실패")
 
+            except Exception as error:
+                print(f"행동 데이터 처리 실패: {error}")
 
-        # --------------------------------------
-        # 수집 중 로그아웃 여부 확인
-        # --------------------------------------
+                # 반복 오류 시 과도한 재시도 방지
+                # 로그아웃 신호가 오면 대기 종료
+                stop_event.wait(1)
 
-        if not config.ACCESS_TOKEN:
+    except KeyboardInterrupt:
+        print("\nAgent를 종료합니다.")
 
-            print(
-                "로그아웃 감지 - "
-                "수집한 데이터는 "
-                "전송하지 않습니다."
-            )
-
-            continue
-
-
-        if not config.SESSION_ID:
-
-            print(
-                "Session 종료 감지 - "
-                "수집한 데이터는 "
-                "전송하지 않습니다."
-            )
-
-            continue
-
-
-        # --------------------------------------
-        # Device 정보
-        # --------------------------------------
-
-        device_data = get_device_info()
-
-
-        # --------------------------------------
-        # 시간
-        # --------------------------------------
-
-        timestamp = get_timestamp()
-
-
-        # --------------------------------------
-        # Event JSON 생성
-        # --------------------------------------
-
-        event = create_event(
-            behavior_data=behavior_data,
-            device_data=device_data,
-            timestamp=timestamp
-        )
-
-
-        # 현재 로그인 Session 연결
-        event["session_id"] = (
-            config.SESSION_ID
-        )
-
-
-        print(
-            "JSON 생성 완료"
-        )
-
-
-        print(
-            json.dumps(
-                event,
-                indent=4,
-                ensure_ascii=False
-            )
-        )
-
-
-        # --------------------------------------
-        # 전송 직전 로그인 상태 재확인
-        # --------------------------------------
-
-        if not config.ACCESS_TOKEN:
-
-            print(
-                "로그아웃 감지 - "
-                "서버 전송을 중단합니다."
-            )
-
-            continue
-
-
-        # --------------------------------------
-        # Backend 전송
-        # --------------------------------------
-
-        success = send_event(
-            event
-        )
-
-
-        if success:
-
-            print(
-                "서버 전송 완료"
-            )
-
-        else:
-
-            print(
-                "서버 전송 실패"
-            )
-
-
-        print(
-            "다음 행동 데이터를 "
-            "수집합니다."
-        )
+    finally:
+        config.clear_agent_auth()
 
 
 if __name__ == "__main__":

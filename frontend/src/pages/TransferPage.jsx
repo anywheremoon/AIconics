@@ -24,6 +24,7 @@ function TransferPage() {
 
     setLoading(true);
     setError("");
+
     const requestId = crypto.randomUUID();
 
     try {
@@ -33,17 +34,42 @@ function TransferPage() {
         amount: String(amount),
       });
 
-      navigate("/transaction-result", {
-        state: {
-          success: true,
-          type: "TRANSFER",
-          amount,
-          requestId,
-          createdAt: result.created_at,
-          balanceAfter: result.balance_after,
-          result,
-        },
-      });
+      const navigationState = {
+        success: true,
+        type: "TRANSFER",
+        amount,
+        requestId,
+        createdAt: result.created_at,
+        balanceAfter: result.balance_after,
+        result,
+        transaction: result,
+      };
+
+      switch (result.status) {
+        case "COMPLETED":
+          navigate("/transaction-result", {
+            state: navigationState,
+          });
+          break;
+
+        case "PENDING_VERIFICATION":
+          navigate("/verification", {
+            state: navigationState,
+          });
+          break;
+
+        case "PENDING_REVIEW":
+        case "ACCOUNT_REVIEW":
+          navigate("/transaction-pending", {
+            state: navigationState,
+          });
+          break;
+
+        default:
+          setError(
+            `알 수 없는 거래 상태입니다: ${result.status ?? "상태 없음"}`
+          );
+      }
     } catch (err) {
       setError(err.message || "이체에 실패했습니다.");
     } finally {
@@ -54,13 +80,19 @@ function TransferPage() {
   return (
     <main className="page-container transaction-page">
       <h1 className="page-title">송금</h1>
+
       <p className="page-description">
-        현재 잔액: {accountLoading
+        현재 잔액:{" "}
+        {accountLoading
           ? "조회 중..."
           : `${Number(account?.balance ?? 0).toLocaleString("ko-KR")}원`}
       </p>
 
-      {error && <p className="error-message" role="alert">{error}</p>}
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
+        </p>
+      )}
 
       <TransferForm
         onSubmit={handleTransfer}

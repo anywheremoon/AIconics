@@ -1,131 +1,142 @@
-from pynput import keyboard
+import threading
 import time
 
+from pynput import keyboard
 
-def collect_keyboard(duration=30):
-    # 전체 키 입력 수
+
+MAX_IDLE_TIME_MS = 3000
+
+MIN_HOLD_TIME_MS = 20
+MAX_HOLD_TIME_MS = 1000
+
+MIN_FLIGHT_TIME_MS = 0
+MAX_FLIGHT_TIME_MS = 3000
+
+
+def collect_keyboard(duration=30, stop_event=None):
+    if duration <= 0:
+        raise ValueError("duration은 0보다 커야 합니다.")
+
+    if stop_event is None:
+        stop_event = threading.Event()
+
     total_keystrokes = 0
 
-    # 각 키가 눌린 시간을 저장
     press_times = {}
-
-    # Hold Time 목록
     hold_times = []
-
-    # Flight Time 목록
     flight_times = []
 
-    # 직전에 뗀 키의 시간
     last_release_time = None
+    previous_event_time = None
+    active_time_seconds = 0.0
 
-    # 전체 입력 시작/종료 기준
-    first_press_time = None
-    last_press_time = None
+    def update_active_time(current_time):
+        nonlocal previous_event_time
+        nonlocal active_time_seconds
 
+        if previous_event_time is not None:
+            gap_seconds = current_time - previous_event_time
+
+            if 0 <= gap_seconds <= MAX_IDLE_TIME_MS / 1000:
+                active_time_seconds += gap_seconds
+
+        previous_event_time = current_time
 
     def on_press(key):
         nonlocal total_keystrokes
-        nonlocal last_release_time
-        nonlocal first_press_time
-        nonlocal last_press_time
 
-        current_time = time.time()
+        if stop_event.is_set():
+            return False
 
-        # 같은 키를 계속 누르고 있을 때
-        # OS key repeat 때문에 중복 계산되는 것 방지
+        current_time = time.monotonic()
+        update_active_time(current_time)
+
+        # 키를 길게 누를 때 반복되는 down은 제외
         if key in press_times:
             return
 
         press_times[key] = current_time
         total_keystrokes += 1
 
-        # 첫 번째 키 입력 시간
-        if first_press_time is None:
-            first_press_time = current_time
-
-        last_press_time = current_time
-
-        # Flight Time 계산
-        # 이전 키를 뗀 후 다음 키를 누르기까지 걸린 시간
         if last_release_time is not None:
-            flight_time = current_time - last_release_time
+            flight_time_ms = (
+                current_time - last_release_time
+            ) * 1000
 
-            # ms 단위 저장
-            if flight_time >= 0:
-                flight_times.append(flight_time * 1000)
-
+            if (
+                MIN_FLIGHT_TIME_MS
+                <= flight_time_ms
+                <= MAX_FLIGHT_TIME_MS
+            ):
+                flight_times.append(flight_time_ms)
 
     def on_release(key):
         nonlocal last_release_time
 
-        current_time = time.time()
+        if stop_event.is_set():
+            return False
 
-        # 해당 키의 press 시간이 존재하는 경우
+        current_time = time.monotonic()
+        update_active_time(current_time)
+
         if key in press_times:
             press_time = press_times.pop(key)
+            hold_time_ms = (current_time - press_time) * 1000
 
-            # Hold Time 계산
-            hold_time = current_time - press_time
-
-            if hold_time >= 0:
-                hold_times.append(hold_time * 1000)
+            if (
+                MIN_HOLD_TIME_MS
+                <= hold_time_ms
+                <= MAX_HOLD_TIME_MS
+            ):
+                hold_times.append(hold_time_ms)
 
         last_release_time = current_time
 
+    if stop_event.is_set():
+        return {}
 
     listener = keyboard.Listener(
         on_press=on_press,
-        on_release=on_release
+        on_release=on_release,
     )
-
     listener.start()
 
-    print(f"{duration}초 동안 키보드 입력을 수집합니다...")
+    try:
+        stop_event.wait(duration)
+    finally:
+        listener.stop()
+        listener.join()
 
-    time.sleep(duration)
+    if stop_event.is_set():
+        return {}
 
-    listener.stop()
-    listener.join()
+    typing_speed = (
+        total_keystrokes / active_time_seconds
+        if active_time_seconds > 0
+        else 0.0
+    )
 
+    avg_hold_time = (
+        sum(hold_times) / len(hold_times)
+        if hold_times
+        else 0.0
+    )
 
-    # -----------------------------
-    # Typing Speed 계산
-    # -----------------------------
-    # 기존 프로젝트 형식대로 분당 키 입력 수
-    if total_keystrokes > 0:
-        typing_speed = total_keystrokes / (duration / 60)
-    else:
-        typing_speed = 0
-
-
-    # -----------------------------
-    # 평균 Hold Time
-    # -----------------------------
-    if hold_times:
-        avg_hold_time = sum(hold_times) / len(hold_times)
-    else:
-        avg_hold_time = 0
-
-
-    # -----------------------------
-    # 평균 Flight Time
-    # -----------------------------
-    if flight_times:
-        avg_flight_time = sum(flight_times) / len(flight_times)
-    else:
-        avg_flight_time = 0
-
+    avg_flight_time = (
+        sum(flight_times) / len(flight_times)
+        if flight_times
+        else 0.0
+    )
 
     return {
         "typing_speed": round(typing_speed, 2),
         "avg_hold_time": round(avg_hold_time, 2),
         "avg_flight_time": round(avg_flight_time, 2),
-        "total_keystrokes": total_keystrokes
+        "total_keystrokes": total_keystrokes,
     }
 
 
 if __name__ == "__main__":
     result = collect_keyboard()
-
     print("\n키보드 수집 결과")
     print(result)
