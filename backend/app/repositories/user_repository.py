@@ -35,3 +35,7 @@ def update_role(db: Session, user: User, role: str) -> User:
 
 def username_exists(db: Session, username: str) -> bool:
     return db.query(User.id).filter(User.username == username).first() is not None
+
+def delete_user(db: Session, user: User) -> None:
+    db.delete(user)
+    db.flush()

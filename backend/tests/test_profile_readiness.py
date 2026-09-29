@@ -45,6 +45,8 @@ def test_profile_is_not_ready_before_ten_events():
 def test_profile_is_ready_at_ten_events():
     assert _baseline_status_for(10) == user_profile_service.BASELINE_AVAILABLE
 
+def test_profile_remains_ready_after_ten_events():
+    assert _baseline_status_for(11) == user_profile_service.BASELINE_AVAILABLE
 
 @patch("app.services.risk_engine.detect_anomaly", return_value=NORMAL_ML_RESULT)
 def test_baseline_is_applied_only_after_profile_is_ready(_detect_anomaly):

@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.graph_sync_service import sync_transfer
 from app.models.account_model import Account
 from app.models.event_model import Event
 from app.repositories import account_repository, transaction_repository
@@ -17,6 +18,8 @@ from app.services.risk_decision_service import (
 
 
 OPENING_BALANCE = Decimal("100000.00")
+TRANSACTION_BLOCKED_RISK_LEVELS = frozenset({"MEDIUM", "HIGH"})
+TRANSACTION_BLOCKED_RISK_SCORE = 40
 
 
 def _new_account_number(db: Session) -> str:
@@ -94,10 +97,13 @@ def _ensure_request_id_available(
         )
 
 
+
 def _ensure_transaction_allowed(
     db: Session,
     user_id: int,
 ) -> None:
+    """Block a transaction when the latest risk is medium or high."""
+
     latest_event = (
         db.query(Event)
         .filter(Event.user_id == str(user_id))
@@ -108,14 +114,19 @@ def _ensure_transaction_allowed(
         .first()
     )
 
-    # 아직 Risk 데이터가 없는 사용자는 기존 거래 흐름 유지
     if latest_event is None:
         return
 
-    if latest_event.risk_level in ("MEDIUM", "HIGH"):
+    risk_level = (latest_event.risk_level or "").upper()
+    risk_score = float(latest_event.risk_score or 0)
+
+    if (
+        risk_level in TRANSACTION_BLOCKED_RISK_LEVELS
+        or risk_score >= TRANSACTION_BLOCKED_RISK_SCORE
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="현재 위험도가 높아 거래가 제한되었습니다.",
+            detail="Transaction blocked due to current risk level",
         )
 
 
@@ -170,7 +181,7 @@ def list_my_transactions(db: Session, user_id: int):
 
 
 def transfer(db: Session, user_id: int, data):
-    
+    _ensure_transaction_allowed(db, user_id)
 
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
@@ -226,6 +237,11 @@ def transfer(db: Session, user_id: int, data):
     db.commit()
     db.refresh(transaction)
 
+    sync_transfer(
+        transaction,
+        sender,
+        recipient,
+    )
     return transaction
 
 
@@ -296,6 +312,7 @@ def withdraw(db: Session, user_id: int, data):
         "created_at": transaction.created_at,
         "balance_after": sender.balance,
     }
+
 
 
 def stage_transfer_with_risk(
@@ -420,3 +437,4 @@ def stage_transfer_with_risk(
     db.flush()
 
     return transaction
+
