@@ -19,6 +19,7 @@ from app.routes import (
     events,
     graph,
     risk_score,
+    transaction_risk,
     transactions,
     user_profiles,
 )
@@ -75,6 +76,7 @@ app.include_router(user_profiles.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(risk_score.router)
+app.include_router(transaction_risk.router)
 app.include_router(events.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
