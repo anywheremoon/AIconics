@@ -5,6 +5,7 @@ from app.services.risk_explanation_service import build_reasons
 
 
 BASELINE_INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
+BASELINE_AVAILABLE = "AVAILABLE"
 
 
 def calculate_risk_score(
@@ -22,10 +23,10 @@ def calculate_risk_score(
 
     # A partial profile is still being learned and must not affect risk.
     # ML and profile-independent identity rules remain active.
-    if baseline_status == BASELINE_INSUFFICIENT_DATA:
-        effective_comparison = {}
-    else:
+    if baseline_status == BASELINE_AVAILABLE:
         effective_comparison = comparison
+    else:
+        effective_comparison = {}
 
     if hasattr(event_data, "model_dump"):
         event_dict = event_data.model_dump()
