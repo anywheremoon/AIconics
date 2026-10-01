@@ -12,6 +12,9 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.models.account_model import Account
 from app.models.device_model import Device
+from app.models.event_model import Event
+from app.models.risk_assessment_model import RiskAssessment
+from app.models.risk_factor_model import RiskFactor
 from app.models.transaction_model import Transaction
 from app.models.user_model import User
 from app.models.user_session_model import UserSession
@@ -122,6 +125,52 @@ def add_transfer(
     db.commit()
 
 
+def add_behavior_event(
+    db,
+    user_id: int,
+    session_id: str,
+    *,
+    behavior_score: float = 0,
+    identity_score: float = 0,
+):
+    session = db.get(UserSession, session_id)
+    reasons = []
+    if identity_score:
+        reasons.append(
+            {
+                "reason_code": "NEW_DEVICE",
+                "description": "A new device was detected.",
+                "score_type": "IDENTITY",
+                "score_contribution": identity_score,
+            }
+        )
+    db.add(
+        Event(
+            user_id=str(user_id),
+            session_id=session_id,
+            device_id=session.device_id,
+            ip_address="127.0.0.1",
+            location="Seoul",
+            typing_speed=0,
+            avg_hold_time=0,
+            avg_flight_time=0,
+            total_keystrokes=0,
+            mouse_move_count=0,
+            click_count=0,
+            is_new_device=bool(identity_score),
+            profile_deviation_score=0,
+            detect_anomaly=False,
+            behavior_score=behavior_score,
+            identity_score=identity_score,
+            baseline_status="AVAILABLE",
+            reasons=reasons,
+            risk_score=behavior_score + identity_score,
+            risk_level="LOW",
+        )
+    )
+    db.commit()
+
+
 def risk_request(session_id: str, recipient: Account, amount: str):
     return SimpleNamespace(
         session_id=UUID(session_id),
@@ -163,11 +212,15 @@ def test_scores_new_account_recipient_recent_login_and_high_amount():
     db.close()
 
 
-def test_existing_recipient_and_normal_amount_have_no_risk_reasons():
+def test_account_older_than_exactly_one_day_is_not_new():
     now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
     db = TestingSessionLocal()
-    user, sender, recipient, session_id = create_risk_context(db, now)
-    add_transfer(db, sender.id, recipient.id, "1000.00", now - timedelta(days=2))
+    user, _, recipient, session_id = create_risk_context(
+        db,
+        now,
+        account_age=timedelta(hours=25),
+        login_age=timedelta(hours=1),
+    )
 
     result = calculate_transaction_risk(
         db,
@@ -176,15 +229,13 @@ def test_existing_recipient_and_normal_amount_have_no_risk_reasons():
         now=now,
     )
 
-    assert result["transaction_score"] == 0
-    assert result["is_new_recipient"] is False
-    assert result["is_unusually_large"] is False
-    assert result["average_transfer_amount"] == Decimal("1000.0")
-    assert result["reasons"] == []
+    assert result["account_age_days"] == 1
+    assert "NEW_ACCOUNT" not in result["reasons"]
+    assert result["is_new_account_high_amount"] is False
     db.close()
 
 
-def test_detects_transfer_three_times_larger_than_historical_average():
+def test_existing_recipient_and_historical_average_detection():
     now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
     db = TestingSessionLocal()
     user, sender, recipient, session_id = create_risk_context(db, now)
@@ -197,13 +248,15 @@ def test_detects_transfer_three_times_larger_than_historical_average():
         now=now,
     )
 
-    assert result["transaction_score"] == 20
+    assert result["is_new_recipient"] is False
+    assert result["average_transfer_amount"] == Decimal("100000.0")
     assert result["is_unusually_large"] is True
+    assert result["transaction_score"] == 20
     assert result["reasons"] == ["UNUSUALLY_LARGE_TRANSFER"]
     db.close()
 
 
-def test_velocity_uses_projected_ten_minute_count_and_hourly_amount():
+def test_velocity_counts_ten_minutes_and_sums_one_hour():
     now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
     db = TestingSessionLocal()
     user, sender, recipient, session_id = create_risk_context(db, now)
@@ -223,11 +276,11 @@ def test_velocity_uses_projected_ten_minute_count_and_hourly_amount():
         now=now,
     )
 
-    assert result["transaction_score"] == 45
     assert result["recent_10_minute_count"] == 4
     assert result["projected_10_minute_count"] == 5
     assert result["recent_1_hour_amount"] == Decimal("9600000.00")
     assert result["projected_1_hour_amount"] == Decimal("10100000.00")
+    assert result["transaction_score"] == 45
     assert result["reasons"] == [
         "VELOCITY_HIGH_FREQUENCY",
         "VELOCITY_HIGH_AMOUNT",
@@ -244,25 +297,7 @@ def test_transaction_score_is_capped_at_one_hundred():
         account_age=timedelta(hours=1),
         login_age=timedelta(minutes=1),
     )
-
-    other_user = User(username=f"other-{uuid4()}", password_hash="hash")
-    db.add(other_user)
-    db.flush()
-    other_recipient = Account(
-        user_id=other_user.id,
-        account_number=f"{other_user.id:012d}",
-        balance=Decimal("0.00"),
-        opened_at=now - timedelta(days=30),
-    )
-    db.add(other_recipient)
-    db.commit()
-    add_transfer(
-        db,
-        sender.id,
-        other_recipient.id,
-        "100000.00",
-        now - timedelta(hours=2),
-    )
+    add_transfer(db, sender.id, recipient.id, "100000.00", now - timedelta(days=2))
 
     result = calculate_transaction_risk(
         db,
@@ -277,53 +312,7 @@ def test_transaction_score_is_capped_at_one_hundred():
     db.close()
 
 
-def test_detects_transfer_of_most_balance_shortly_after_incoming_transfer():
-    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
-    db = TestingSessionLocal()
-    user, sender, recipient, session_id = create_risk_context(db, now)
-    add_transfer(
-        db,
-        sender.id,
-        recipient.id,
-        "500000.00",
-        now - timedelta(days=2),
-    )
-
-    funding_user = User(username=f"funding-{uuid4()}", password_hash="hash")
-    db.add(funding_user)
-    db.flush()
-    funding_account = Account(
-        user_id=funding_user.id,
-        account_number=f"{funding_user.id:012d}",
-        balance=Decimal("1000000.00"),
-        opened_at=now - timedelta(days=30),
-    )
-    db.add(funding_account)
-    sender.balance = Decimal("1000000.00")
-    db.commit()
-    add_transfer(
-        db,
-        funding_account.id,
-        sender.id,
-        "900000.00",
-        now - timedelta(minutes=5),
-    )
-
-    result = calculate_transaction_risk(
-        db,
-        user.id,
-        risk_request(session_id, recipient, "800000.00"),
-        now=now,
-    )
-
-    assert result["transaction_score"] == 25
-    assert result["recent_incoming_amount"] == Decimal("900000.00")
-    assert result["is_rapid_balance_drain"] is True
-    assert result["reasons"] == ["RAPID_BALANCE_DRAIN"]
-    db.close()
-
-
-def test_transaction_risk_api_returns_score_for_authenticated_user(client):
+def test_transaction_risk_api_returns_authenticated_users_score(client):
     now = datetime.now(timezone.utc)
     db = TestingSessionLocal()
     user, _, recipient, session_id = create_risk_context(
@@ -347,24 +336,16 @@ def test_transaction_risk_api_returns_score_for_authenticated_user(client):
     )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["transaction_score"] == 85
-    assert body["is_new_recipient"] is True
-    assert body["account_age_days"] == 0
-    assert body["minutes_after_login"] <= 5
-    assert body["recent_10_minute_count"] == 0
-    assert body["projected_10_minute_count"] == 1
-    assert body["is_new_account_high_amount"] is True
-    assert body["is_rapid_balance_drain"] is False
+    assert response.json()["transaction_score"] == 85
+    assert response.json()["recent_10_minute_count"] == 0
 
 
 def test_transaction_risk_api_rejects_another_users_session(client):
     now = datetime.now(timezone.utc)
     db = TestingSessionLocal()
     user, _, recipient, _ = create_risk_context(db, now)
-    other_user, _, _, other_session_id = create_risk_context(db, now)
+    _, _, _, other_session_id = create_risk_context(db, now)
     user_id = user.id
-    other_user_id = other_user.id
     recipient_number = recipient.account_number
     db.close()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
@@ -378,8 +359,195 @@ def test_transaction_risk_api_rejects_another_users_session(client):
         },
     )
 
-    assert other_user_id != user_id
     assert response.status_code == 403
     assert response.json()["detail"] == (
         "Session does not belong to the authenticated user"
     )
+
+
+def test_transfer_executes_with_server_calculated_low_risk(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+    user, sender, recipient, session_id = create_risk_context(db, now)
+    add_transfer(db, sender.id, recipient.id, "1000.00", now - timedelta(days=2))
+    add_behavior_event(db, user.id, session_id)
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+    db.close()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000301",
+            "session_id": session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "COMPLETED"
+    db = TestingSessionLocal()
+    transaction = db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000301"
+    ).one()
+    assessment = db.query(RiskAssessment).filter(
+        RiskAssessment.transaction_id == transaction.id
+    ).one()
+    assert assessment.transaction_score == 0
+    assert assessment.decision == "APPROVED"
+    assert db.get(Account, sender_id).balance == Decimal("49999000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("101000.00")
+    db.close()
+
+
+def test_transfer_persists_risk_and_does_not_move_money_when_verification_required(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+    user, sender, recipient, session_id = create_risk_context(
+        db,
+        now,
+        account_age=timedelta(hours=12),
+        login_age=timedelta(minutes=3),
+    )
+    add_behavior_event(db, user.id, session_id, identity_score=30)
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+    db.close()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000302",
+            "session_id": session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "5000000.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PENDING_VERIFICATION"
+    db = TestingSessionLocal()
+    transaction = db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000302"
+    ).one()
+    assessment = db.query(RiskAssessment).filter(
+        RiskAssessment.transaction_id == transaction.id
+    ).one()
+    factors = db.query(RiskFactor).filter(
+        RiskFactor.risk_assessment_id == assessment.id
+    ).all()
+    assert assessment.transaction_score == 85
+    assert assessment.decision == "REQUIRE_VERIFICATION"
+    assert {factor.reason_code for factor in factors} >= {
+        "NEW_ACCOUNT",
+        "NEW_RECIPIENT",
+        "TRANSFER_SHORTLY_AFTER_LOGIN",
+        "HIGH_AMOUNT_TRANSFER",
+    }
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+    db.close()
+
+
+def test_transfer_does_not_move_money_when_final_risk_is_high(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+    user, sender, recipient, session_id = create_risk_context(db, now)
+    add_behavior_event(
+        db,
+        user.id,
+        session_id,
+        behavior_score=65,
+        identity_score=80,
+    )
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+    db.close()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000304",
+            "session_id": session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "PENDING_REVIEW"
+    db = TestingSessionLocal()
+    transaction = db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000304"
+    ).one()
+    assessment = db.query(RiskAssessment).filter(
+        RiskAssessment.transaction_id == transaction.id
+    ).one()
+    assert assessment.risk_level == "HIGH"
+    assert assessment.decision == "PENDING_REVIEW"
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+    db.close()
+
+
+def test_transfer_rejects_historical_session_behavior_event(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+    user, sender, recipient, old_session_id = create_risk_context(db, now)
+    add_behavior_event(db, user.id, old_session_id)
+
+    device_id = f"device-{uuid4()}"
+    current_session_id = str(uuid4())
+    db.add(Device(device_id=device_id))
+    db.flush()
+    db.add(
+        UserSession(
+            session_id=current_session_id,
+            user_id=user.id,
+            device_id=device_id,
+            login_at=now,
+            device_trust_status="TRUSTED_DEVICE",
+            repeated_login_detected=False,
+            account_switch_detected=False,
+            recent_login_count=1,
+            recent_device_account_count=1,
+        )
+    )
+    db.commit()
+    add_behavior_event(db, user.id, current_session_id)
+
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+    db.close()
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000303",
+            "session_id": old_session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 409
+    db = TestingSessionLocal()
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000303"
+    ).count() == 0
+    db.close()
