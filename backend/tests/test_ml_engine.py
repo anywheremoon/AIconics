@@ -9,7 +9,7 @@ NORMAL_AGENT_EVENT = {
 }
 
 
-def test_ml_input_uses_training_keystroke_window():
+def test_ml_input_uses_measured_keystroke_count():
     features = extract_ml_features(NORMAL_AGENT_EVENT)
 
     assert features == [1.73, 83.44, 503.0, 10.0]

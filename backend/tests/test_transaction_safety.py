@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -107,12 +108,14 @@ def test_insufficient_balance(client):
         balance=100000,
     )
 
+    session_id = create_risk_event(sender_id, "LOW", 0)
     authenticate_as(sender_id)
 
     response = client.post(
         "/api/transactions/transfer",
         json={
             "request_id": "00000000-0000-4000-8000-000000000003",
+            "session_id": session_id,
             "recipient_account_number": "222222222222",
             "amount": "10000.00",
         },
@@ -147,6 +150,7 @@ def test_zero_amount_transfer(client):
         "/api/transactions/transfer",
         json={
             "request_id": "00000000-0000-4000-8000-000000000004",
+            "session_id": "00000000-0000-4000-8000-000000000204",
             "recipient_account_number": "444444444444",
             "amount": "0.00",
         },
@@ -172,6 +176,7 @@ def test_negative_amount_transfer(client):
         "/api/transactions/transfer",
         json={
             "request_id": "00000000-0000-4000-8000-000000000005",
+            "session_id": "00000000-0000-4000-8000-000000000205",
             "recipient_account_number": "666666666666",
             "amount": "-1000.00",
         },
@@ -186,12 +191,14 @@ def test_transfer_to_same_account(client):
         "777777777777",
     )
 
+    session_id = create_risk_event(user_id, "LOW", 0)
     authenticate_as(user_id)
 
     response = client.post(
         "/api/transactions/transfer",
         json={
             "request_id": "00000000-0000-4000-8000-000000000006",
+            "session_id": session_id,
             "recipient_account_number": "777777777777",
             "amount": "1000.00",
         },
@@ -206,12 +213,14 @@ def test_transfer_to_nonexistent_account(client):
         "888888888888",
     )
 
+    session_id = create_risk_event(user_id, "LOW", 0)
     authenticate_as(user_id)
 
     response = client.post(
         "/api/transactions/transfer",
         json={
             "request_id": "00000000-0000-4000-8000-000000000007",
+            "session_id": session_id,
             "recipient_account_number": "999999999999",
             "amount": "1000.00",
         },
@@ -233,10 +242,12 @@ def test_duplicate_request_id_does_not_double_charge(client):
         balance=100000,
     )
 
+    session_id = create_risk_event(sender_id, "LOW", 0)
     authenticate_as(sender_id)
 
     request_data = {
         "request_id": "00000000-0000-4000-8000-000000000008",
+        "session_id": session_id,
         "recipient_account_number": "343434343434",
         "amount": "10000.00",
     }
@@ -274,17 +285,14 @@ def test_duplicate_request_id_does_not_double_charge(client):
 
     db.close()
 
-def create_risk_event(
-    user_id: int,
-    risk_level: str,
-    risk_score: float,
-    *,
-    event_index: int = 0,
-):
+def create_risk_event(user_id: int, risk_level: str, risk_score: float):
     db = TestingSessionLocal()
 
-    device_id = f"test-device-{user_id}-{event_index}"
-    session_id = f"test-session-{user_id}-{event_index}"
+    event_sequence = db.query(Event).filter(
+        Event.user_id == str(user_id)
+    ).count() + 1
+    device_id = f"test-device-{user_id}-{event_sequence}"
+    session_id = str(uuid4())
 
     device = Device(
         device_id=device_id,
@@ -337,101 +345,28 @@ def create_risk_event(
     db.add(event)
     db.commit()
     db.close()
+    return session_id
 
-@pytest.mark.parametrize("transaction_type", ["transfer", "withdraw"])
-def test_low_risk_user_can_transact(client, transaction_type):
-    account_number = "101010101010"
-    user_id, _ = create_user_with_account(
-        f"low-risk-{transaction_type}",
-        account_number,
+def test_low_risk_user_can_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "low-risk-user",
+        "101010101010",
     )
-    create_risk_event(user_id, "LOW", 20)
-    authenticate_as(user_id)
 
-    request_data = {
-        "request_id": (
-            "00000000-0000-4000-8000-000000000101"
-            if transaction_type == "transfer"
-            else "00000000-0000-4000-8000-000000000102"
-        ),
-        "amount": "1000.00",
-    }
-    if transaction_type == "transfer":
-        create_user_with_account("low-risk-recipient", "202020202020")
-        request_data["recipient_account_number"] = "202020202020"
+    create_user_with_account(
+        "recipient-low",
+        "202020202020",
+    )
+
+    session_id = create_risk_event(sender_id, "LOW", 20)
+    authenticate_as(sender_id)
 
     response = client.post(
-        f"/api/transactions/{transaction_type}",
-        json=request_data,
-    )
-
-    assert response.status_code == 200
-
-
-@pytest.mark.parametrize("risk_level,risk_score", [("MEDIUM", 50), ("HIGH", 80)])
-@pytest.mark.parametrize("transaction_type", ["transfer", "withdraw"])
-def test_medium_and_high_risk_users_cannot_transact(
-    client,
-    transaction_type,
-    risk_level,
-    risk_score,
-):
-    case_number = {
-        ("transfer", "MEDIUM"): 301,
-        ("transfer", "HIGH"): 302,
-        ("withdraw", "MEDIUM"): 303,
-        ("withdraw", "HIGH"): 304,
-    }[(transaction_type, risk_level)]
-    account_number = f"{case_number:012d}"
-    user_id, account_id = create_user_with_account(
-        f"{risk_level.lower()}-{transaction_type}",
-        account_number,
-    )
-    create_risk_event(user_id, risk_level, risk_score)
-    authenticate_as(user_id)
-
-    request_id = f"00000000-0000-4000-8000-{case_number:012d}"
-    request_data = {"request_id": request_id, "amount": "1000.00"}
-    recipient_account_id = None
-    if transaction_type == "transfer":
-        recipient_number = f"{case_number + 1000:012d}"
-        _, recipient_account_id = create_user_with_account(
-            f"recipient-{risk_level.lower()}",
-            recipient_number,
-        )
-        request_data["recipient_account_number"] = recipient_number
-
-    response = client.post(
-        f"/api/transactions/{transaction_type}",
-        json=request_data,
-    )
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Transaction blocked due to current risk level"
-
-    db = TestingSessionLocal()
-    account = db.query(Account).filter(Account.id == account_id).one()
-    assert float(account.balance) == 100000.00
-    if recipient_account_id is not None:
-        recipient = db.query(Account).filter(Account.id == recipient_account_id).one()
-        assert float(recipient.balance) == 100000.00
-    assert db.query(Transaction).filter(Transaction.request_id == request_id).count() == 0
-    db.close()
-
-
-def test_transaction_uses_latest_risk_event(client):
-    user_id, _ = create_user_with_account(
-        "latest-risk-user",
-        "505050505050",
-    )
-    create_risk_event(user_id, "HIGH", 80, event_index=1)
-    create_risk_event(user_id, "LOW", 20, event_index=2)
-    authenticate_as(user_id)
-
-    response = client.post(
-        "/api/transactions/withdraw",
+        "/api/transactions/transfer",
         json={
-            "request_id": "00000000-0000-4000-8000-000000000305",
+            "request_id": "00000000-0000-4000-8000-000000000101",
+            "session_id": session_id,
+            "recipient_account_number": "202020202020",
             "amount": "1000.00",
         },
     )
@@ -439,25 +374,177 @@ def test_transaction_uses_latest_risk_event(client):
     assert response.status_code == 200
 
 
-def test_risk_score_threshold_cannot_be_bypassed_by_inconsistent_level(client):
-    user_id, account_id = create_user_with_account(
-        "inconsistent-risk-user",
-        "515151515151",
+def test_medium_risk_user_cannot_transfer(client):
+    sender_id, _ = create_user_with_account(
+        "medium-risk-user",
+        "303030303030",
     )
-    create_risk_event(user_id, "LOW", 50)
-    authenticate_as(user_id)
 
-    request_id = "00000000-0000-4000-8000-000000000306"
+    create_user_with_account(
+        "recipient-medium",
+        "404040404040",
+    )
+
+    session_id = create_risk_event(sender_id, "MEDIUM", 50)
+    authenticate_as(sender_id)
+
     response = client.post(
-        "/api/transactions/withdraw",
-        json={"request_id": request_id, "amount": "1000.00"},
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000102",
+            "session_id": session_id,
+            "recipient_account_number": "404040404040",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_high_risk_user_cannot_transfer(client):
+    sender_id, sender_account_id = create_user_with_account(
+        "high-risk-transfer-user",
+        "414141414141",
+    )
+
+    _, recipient_account_id = create_user_with_account(
+        "recipient-high",
+        "424242424242",
+    )
+
+    session_id = create_risk_event(sender_id, "HIGH", 80)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000110",
+            "session_id": session_id,
+            "recipient_account_number": "424242424242",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+    db = TestingSessionLocal()
+    sender = db.query(Account).filter(Account.id == sender_account_id).first()
+    recipient = db.query(Account).filter(Account.id == recipient_account_id).first()
+    assert float(sender.balance) == 100000.00
+    assert float(recipient.balance) == 100000.00
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000110"
+    ).count() == 0
+    db.close()
+
+
+def test_transfer_uses_latest_risk_event(client):
+    sender_id, _ = create_user_with_account(
+        "latest-risk-user",
+        "434343434343",
+    )
+
+    create_user_with_account(
+        "latest-risk-recipient",
+        "454545454545",
+    )
+
+    create_risk_event(sender_id, "HIGH", 80)
+    session_id = create_risk_event(sender_id, "LOW", 20)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000111",
+            "session_id": session_id,
+            "recipient_account_number": "454545454545",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_transfer_blocks_when_latest_risk_event_became_high(client):
+    sender_id, sender_account_id = create_user_with_account(
+        "latest-high-risk-user",
+        "464646464646",
+    )
+    _, recipient_account_id = create_user_with_account(
+        "latest-high-risk-recipient",
+        "474747474747",
+    )
+
+    low_session_id = create_risk_event(sender_id, "LOW", 20)
+    create_risk_event(sender_id, "HIGH", 80)
+    authenticate_as(sender_id)
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000113",
+            "session_id": low_session_id,
+            "recipient_account_number": "474747474747",
+            "amount": "1000.00",
+        },
     )
 
     assert response.status_code == 403
     db = TestingSessionLocal()
-    account = db.query(Account).filter(Account.id == account_id).one()
+    assert float(db.get(Account, sender_account_id).balance) == 100000.00
+    assert float(db.get(Account, recipient_account_id).balance) == 100000.00
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000113"
+    ).count() == 0
+    db.close()
+
+
+def test_high_risk_user_cannot_withdraw(client):
+    user_id, _ = create_user_with_account(
+        "high-risk-user",
+        "505050505050",
+    )
+
+    create_risk_event(user_id, "HIGH", 80)
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000103",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_medium_risk_user_cannot_withdraw(client):
+    user_id, account_id = create_user_with_account(
+        "medium-risk-withdraw-user",
+        "515151515151",
+    )
+
+    create_risk_event(user_id, "MEDIUM", 50)
+    authenticate_as(user_id)
+
+    response = client.post(
+        "/api/transactions/withdraw",
+        json={
+            "request_id": "00000000-0000-4000-8000-000000000112",
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+
+    db = TestingSessionLocal()
+    account = db.query(Account).filter(Account.id == account_id).first()
     assert float(account.balance) == 100000.00
-    assert db.query(Transaction).filter(Transaction.request_id == request_id).count() == 0
+    assert db.query(Transaction).filter(
+        Transaction.request_id == "00000000-0000-4000-8000-000000000112"
+    ).count() == 0
     db.close()
 
 

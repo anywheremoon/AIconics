@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.services.graph_sync_service import sync_transfer
 from app.models.account_model import Account
-from app.models.event_model import Event
 from app.repositories import account_repository, transaction_repository
 from app.schemas.final_risk_schema import FinalRiskResult
 from app.services.risk_assessment_service import create_risk_assessment
@@ -15,11 +14,10 @@ from app.services.risk_decision_service import (
     decide_risk,
     transaction_status_for_decision,
 )
+from app.services.risk_gate_service import ensure_transaction_allowed
 
 
 OPENING_BALANCE = Decimal("100000.00")
-TRANSACTION_BLOCKED_RISK_LEVELS = frozenset({"MEDIUM", "HIGH"})
-TRANSACTION_BLOCKED_RISK_SCORE = 40
 
 
 def _new_account_number(db: Session) -> str:
@@ -96,36 +94,6 @@ def _ensure_request_id_available(
             detail="request_id was already processed",
         )
 
-def _ensure_transaction_allowed(
-    db: Session,
-    user_id: int,
-) -> None:
-    """Block a transaction when the latest risk is medium or high.""" 
-    latest_event = (
-        db.query(Event)
-        .filter(Event.user_id == str(user_id))
-        .order_by(
-            Event.created_at.desc(),
-            Event.id.desc(),
-        )
-        .first()
-    )
-
-    if latest_event is None:
-        return
-
-    risk_level = (latest_event.risk_level or "").upper()
-    risk_score = float(latest_event.risk_score or 0)
-
-    if (
-        risk_level in TRANSACTION_BLOCKED_RISK_LEVELS
-        or risk_score >= TRANSACTION_BLOCKED_RISK_SCORE
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Transaction blocked due to current risk level",
-        )
-
 
 def list_my_transactions(db: Session, user_id: int):
     account = get_my_account(db, user_id)
@@ -178,7 +146,7 @@ def list_my_transactions(db: Session, user_id: int):
 
 
 def transfer(db: Session, user_id: int, data):
-    _ensure_transaction_allowed(db, user_id)
+    ensure_transaction_allowed(db, user_id)
 
     sender = get_or_create_my_account(db, user_id)
     request_id = str(data.request_id)
@@ -244,7 +212,7 @@ def transfer(db: Session, user_id: int, data):
 
 
 def withdraw(db: Session, user_id: int, data):
-    _ensure_transaction_allowed(db, user_id)
+    ensure_transaction_allowed(db, user_id)
 
     sender = get_my_account(db, user_id)
     request_id = str(data.request_id)
@@ -311,6 +279,7 @@ def withdraw(db: Session, user_id: int, data):
         "balance_after": sender.balance,
     }
 
+
 def stage_transfer_with_risk(
     db: Session,
     user_id: int,
@@ -340,7 +309,7 @@ def stage_transfer_with_risk(
             "최종 점수와 거래 결정이 일치하지 않습니다."
         )
 
-    _ensure_transaction_allowed(db, user_id)
+    ensure_transaction_allowed(db, user_id)
 
     sender = get_my_account(db, user_id)
     request_id = str(data.request_id)

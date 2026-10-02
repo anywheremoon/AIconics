@@ -9,6 +9,7 @@ from app.services import session_service, user_profile_service
 from app.services.auth_service import get_current_user
 from app.services.profile_comparison_service import compare_with_profile
 from app.services.risk_engine import calculate_risk_score
+from app.services.risk_gate_service import lock_user_for_risk_transition
 
 
 router = APIRouter(
@@ -36,6 +37,9 @@ def create_event(
         user_id,
         event_data.device_id,
     )
+
+    # Transactions take the same row lock from risk scoring through commit.
+    lock_user_for_risk_transition(db, user_id)
 
     profile = user_profile_service.get_my_profile(db, user_id)
     baseline_status = user_profile_service.get_baseline_status(db, user_id)

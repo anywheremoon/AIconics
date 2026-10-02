@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TransferRequest(BaseModel):
     request_id: UUID
+    session_id: UUID
     recipient_account_number: str = Field(pattern=r"^\d{12}$")
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=2)
 
