@@ -76,6 +76,7 @@ def create_transaction(
     db.refresh(transaction)
     return transaction
 
+
 def delete_sent_transactions(
     db: Session,
     account_id: int,
@@ -84,6 +85,7 @@ def delete_sent_transactions(
         Transaction.sender_account_id == account_id
     ).delete(synchronize_session=False)
     db.flush()
+
 
 def clear_recipient_account(
     db: Session,

@@ -20,6 +20,8 @@ from app.models.user_session_model import UserSession
 from app.repositories import user_repository
 from app.services import user_profile_service
 from app.models.event_model import Event
+from app.repositories import account_repository
+from app.repositories import transaction_repository
 
 
 PASSWORD_ITERATIONS = 600_000
@@ -499,6 +501,26 @@ def delete_user_account(
             UserSession.user_id == user_id
         ).delete(synchronize_session=False)
 
+        # 3. 사용자 계좌 조회
+        account = account_repository.find_by_user_id(db, user_id)
+
+        if account is not None:
+            # 4. 내가 보낸 거래는 삭제
+            transaction_repository.delete_sent_transactions(
+                db,
+                account.id,
+            )
+
+            # 5. 내가 받은 거래는 유지하고 수취 계좌 연결만 제거
+            transaction_repository.clear_recipient_account(
+                db,
+                account.id,
+            )
+
+            # 6. 계좌 삭제
+            account_repository.delete_account(db, account)
+
+        # 7. 사용자 삭제
         user_repository.delete_user(db, user)
 
         # 8. DB 반영
