@@ -6,23 +6,8 @@ from sqlalchemy.orm import Session
 from app.models.transaction_model import Transaction
 
 
-ALLOWED_TRANSACTION_STATUSES = {
-    "COMPLETED",
-    "PENDING_VERIFICATION",
-    "PENDING_REVIEW",
-    "ACCOUNT_REVIEW",
-}
-
-
-def find_by_request_id(
-    db: Session,
-    request_id: str,
-) -> Transaction | None:
-    return (
-        db.query(Transaction)
-        .filter(Transaction.request_id == request_id)
-        .first()
-    )
+def find_by_request_id(db: Session, request_id: str) -> Transaction | None:
+    return db.query(Transaction).filter(Transaction.request_id == request_id).first()
 
 
 def list_for_account(
