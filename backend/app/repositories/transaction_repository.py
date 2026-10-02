@@ -6,11 +6,21 @@ from sqlalchemy.orm import Session
 from app.models.transaction_model import Transaction
 
 
-def find_by_request_id(db: Session, request_id: str) -> Transaction | None:
-    return db.query(Transaction).filter(Transaction.request_id == request_id).first()
+def find_by_request_id(
+    db: Session,
+    request_id: str,
+) -> Transaction | None:
+    return (
+        db.query(Transaction)
+        .filter(Transaction.request_id == request_id)
+        .first()
+    )
 
 
-def list_for_account(db: Session, account_id: int) -> list[Transaction]:
+def list_for_account(
+    db: Session,
+    account_id: int,
+) -> list[Transaction]:
     return (
         db.query(Transaction)
         .filter(
@@ -19,7 +29,10 @@ def list_for_account(db: Session, account_id: int) -> list[Transaction]:
                 Transaction.recipient_account_id == account_id,
             )
         )
-        .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+        .order_by(
+            Transaction.created_at.desc(),
+            Transaction.id.desc(),
+        )
         .all()
     )
 
@@ -32,6 +45,7 @@ def create_transaction(
     sender_account_id: int,
     recipient_account_id: int | None,
     amount: Decimal,
+    status: str = "COMPLETED",
 ) -> Transaction:
     transaction = Transaction(
         request_id=request_id,
@@ -39,9 +53,11 @@ def create_transaction(
         sender_account_id=sender_account_id,
         recipient_account_id=recipient_account_id,
         amount=amount,
-        status="COMPLETED",
+        status=status,
     )
+
     db.add(transaction)
     db.flush()
     db.refresh(transaction)
+
     return transaction
