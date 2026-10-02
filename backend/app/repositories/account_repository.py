@@ -38,3 +38,7 @@ def lock_by_ids(db: Session, account_ids: list[int]) -> list[Account]:
         .with_for_update()
         .all()
     )
+
+def delete_account(db: Session, account: Account) -> None:
+    db.delete(account)
+    db.flush()

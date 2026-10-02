@@ -45,3 +45,26 @@ def create_transaction(
     db.flush()
     db.refresh(transaction)
     return transaction
+
+def delete_sent_transactions(
+    db: Session,
+    account_id: int,
+) -> None:
+    db.query(Transaction).filter(
+        Transaction.sender_account_id == account_id
+    ).delete(synchronize_session=False)
+
+    db.flush()
+
+def clear_recipient_account(
+    db: Session,
+    account_id: int,
+) -> None:
+    db.query(Transaction).filter(
+        Transaction.recipient_account_id == account_id
+    ).update(
+        {Transaction.recipient_account_id: None},
+        synchronize_session=False,
+    )
+
+    db.flush()
