@@ -13,6 +13,16 @@ ALLOWED_TRANSACTION_STATUSES = {
 }
 
 
+ALLOWED_TRANSACTION_STATUSES = frozenset(
+    {
+        "COMPLETED",
+        "PENDING_VERIFICATION",
+        "PENDING_REVIEW",
+        "ACCOUNT_REVIEW",
+    }
+)
+
+
 def find_by_request_id(db: Session, request_id: str) -> Transaction | None:
     return db.query(Transaction).filter(Transaction.request_id == request_id).first()
 

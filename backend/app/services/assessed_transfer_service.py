@@ -1,11 +1,15 @@
+from neo4j.exceptions import ServiceUnavailable
 from sqlalchemy.orm import Session
 
+from app.models.account_model import Account
 from app.schemas.final_risk_schema import FinalRiskResult
 from app.services.account_service import stage_transfer_with_risk
+from app.services.graph_sync_service import sync_transfer
 from app.services.risk_decision_service import assess_final_risk
 from app.services.session_service import validate_active_session
 from app.services.transaction_risk_engine import calculate_transaction_risk
 from app.services.transfer_behavior_service import get_latest_behavior_identity
+from app.services import graph_risk_engine
 
 
 def execute_assessed_transfer(
@@ -41,6 +45,14 @@ def execute_assessed_transfer(
         db.commit()
         db.refresh(transaction)
 
+        # Only completed transfers are facts in the transaction graph.
+        # Pending/review transactions must not influence later graph scores.
+        if transaction.status == "COMPLETED":
+            sender = db.get(Account, transaction.sender_account_id)
+            recipient = db.get(Account, transaction.recipient_account_id)
+            if sender is not None and recipient is not None:
+                sync_transfer(transaction, sender, recipient)
+
         return transaction
 
     except Exception:
@@ -54,44 +66,29 @@ def assess_and_execute_transfer(
     user_id: int,
     data,
 ):
-    """
-    활성 세션을 검증하고 최종 위험도에 따라 송금을 처리한다.
-    """
-    try:
-        # 사용자 잠금과 세션 검증을 함께 수행한다.
-        validate_active_session(
-            db,
-            session_id=str(data.session_id),
-            user_id=user_id,
-        )
-
-        transaction_risk = calculate_transaction_risk(
-            db,
-            user_id,
-            data,
-        )
-
-        behavior_identity = get_latest_behavior_identity(
-            db,
-            user_id=user_id,
-            session_id=str(data.session_id),
-        )
-
-        final_risk = assess_final_risk(
-            behavior_score=behavior_identity["behavior_score"],
-            identity_score=behavior_identity["identity_score"],
-            transaction_score=transaction_risk["transaction_score"],
-            behavior_reasons=behavior_identity["behavior_reasons"],
-            identity_reasons=behavior_identity["identity_reasons"],
-            transaction_reasons=transaction_risk["reason_details"],
-        )
-
-        return execute_assessed_transfer(
-            db,
-            user_id=user_id,
-            data=data,
-            risk_result=final_risk,
-        )
+    """Calculate all risk domains and atomically persist the transfer decision."""
+    # Keep event writes serialized with scoring and balance mutation.
+    ensure_transaction_allowed(db, user_id)
+    transaction_risk = calculate_transaction_risk(db, user_id, data)
+    behavior_identity = get_latest_behavior_identity(
+        db,
+        user_id=user_id,
+        session_id=str(data.session_id),
+    )
+    final_risk = assess_final_risk(
+        behavior_score=behavior_identity["behavior_score"],
+        identity_score=behavior_identity["identity_score"],
+        transaction_score=transaction_risk["transaction_score"],
+        behavior_reasons=behavior_identity["behavior_reasons"],
+        identity_reasons=behavior_identity["identity_reasons"],
+        transaction_reasons=transaction_risk["reason_details"],
+    )
+    return execute_assessed_transfer(
+        db,
+        user_id=user_id,
+        data=data,
+        risk_result=final_risk,
+    )
 
     except Exception:
         db.rollback()

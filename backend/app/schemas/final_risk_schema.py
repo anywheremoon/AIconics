@@ -31,6 +31,7 @@ class WeightedContributions(BaseModel):
     behavior: float = Field(ge=0, le=100)
     identity: float = Field(ge=0, le=100)
     transaction: float = Field(ge=0, le=100)
+    graph: float = Field(default=0, ge=0, le=100)
 
 
 class FinalRiskResult(BaseModel):
@@ -44,6 +45,9 @@ class FinalRiskResult(BaseModel):
     normalized_behavior_score: float = Field(ge=0, le=100)
     normalized_identity_score: float = Field(ge=0, le=100)
     weighted_contributions: WeightedContributions
+    applied_weights: dict[str, float] = Field(default_factory=dict)
+    effective_scores: dict[str, float] = Field(default_factory=dict)
+    duplicate_score_deductions: dict[str, float] = Field(default_factory=dict)
 
     final_risk_score: float = Field(ge=0, le=100)
     risk_level: RiskLevel

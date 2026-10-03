@@ -1,9 +1,17 @@
 import math
 
 
-BEHAVIOR_WEIGHT = 0.30
-IDENTITY_WEIGHT = 0.35
-TRANSACTION_WEIGHT = 0.35
+# Graph owns 20% of the final score.  The original 30:35:35 ratio across the
+# other three domains is preserved inside the remaining 80%.
+BEHAVIOR_WEIGHT = 0.24
+IDENTITY_WEIGHT = 0.28
+TRANSACTION_WEIGHT = 0.28
+GRAPH_WEIGHT = 0.20
+
+# Preserve the calibrated three-domain policy when Graph is unavailable.
+LEGACY_BEHAVIOR_WEIGHT = 0.30
+LEGACY_IDENTITY_WEIGHT = 0.35
+LEGACY_TRANSACTION_WEIGHT = 0.35
 
 # 현재 규칙에서 가능한 최대 합계
 BEHAVIOR_RAW_MAX = 65.0
@@ -58,6 +66,7 @@ def calculate_final_risk(
     behavior_score,
     identity_score,
     transaction_score,
+    graph_score=None,
 ) -> dict:
     """
     거래 단계의 최종 위험 점수를 계산한다.
@@ -80,6 +89,11 @@ def calculate_final_risk(
         transaction_score,
         "transaction_score",
     )
+    graph = (
+        validate_score(graph_score, "graph_score")
+        if graph_score is not None
+        else None
+    )
 
     behavior_normalized = normalize_rule_score(
         behavior_raw,
@@ -93,10 +107,26 @@ def calculate_final_risk(
         maximum=IDENTITY_RAW_MAX,
     )
 
+    if graph is None:
+        applied_weights = {
+            "behavior": LEGACY_BEHAVIOR_WEIGHT,
+            "identity": LEGACY_IDENTITY_WEIGHT,
+            "transaction": LEGACY_TRANSACTION_WEIGHT,
+            "graph": 0.0,
+        }
+    else:
+        applied_weights = {
+            "behavior": BEHAVIOR_WEIGHT,
+            "identity": IDENTITY_WEIGHT,
+            "transaction": TRANSACTION_WEIGHT,
+            "graph": GRAPH_WEIGHT,
+        }
+
     contributions = {
-        "behavior": behavior_normalized * BEHAVIOR_WEIGHT,
-        "identity": identity_normalized * IDENTITY_WEIGHT,
-        "transaction": transaction * TRANSACTION_WEIGHT,
+        "behavior": behavior_normalized * applied_weights["behavior"],
+        "identity": identity_normalized * applied_weights["identity"],
+        "transaction": transaction * applied_weights["transaction"],
+        "graph": (graph or 0.0) * applied_weights["graph"],
     }
 
     final_score = max(
@@ -109,6 +139,7 @@ def calculate_final_risk(
         "behavior_score": behavior_raw,
         "identity_score": identity_raw,
         "transaction_score": transaction,
+        "graph_score": graph,
 
         # 거래 가중합에 사용한 환산 점수
         "normalized_behavior_score": behavior_normalized,
@@ -121,5 +152,6 @@ def calculate_final_risk(
         },
 
         "weighted_contributions": contributions,
+        "applied_weights": applied_weights,
         "final_risk_score": final_score,
     }

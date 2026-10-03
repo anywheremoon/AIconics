@@ -366,7 +366,7 @@ def test_transaction_risk_api_rejects_another_users_session(client):
     )
 
 
-def test_transfer_executes_with_server_calculated_low_risk(client):
+def test_transfer_executes_with_server_calculated_low_risk(client, monkeypatch):
     now = datetime.now(timezone.utc)
     db = TestingSessionLocal()
     user, sender, recipient, session_id = create_risk_context(db, now)
@@ -378,6 +378,27 @@ def test_transfer_executes_with_server_calculated_low_risk(client):
     recipient_number = recipient.account_number
     db.close()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    monkeypatch.setattr(
+        "app.services.graph_risk_engine.analyze_graph_risk",
+        lambda _user_id: {
+            "graph_score": 25,
+            "reason_details": [
+                {
+                    "reason_code": "COMMON_BENEFICIARY",
+                    "description": "A common beneficiary was detected.",
+                    "score_type": "GRAPH",
+                    "score_contribution": 25,
+                }
+            ],
+        },
+    )
+    synced_transactions = []
+    monkeypatch.setattr(
+        "app.services.assessed_transfer_service.sync_transfer",
+        lambda transaction, _sender, _recipient: synced_transactions.append(
+            transaction.id
+        ) or True,
+    )
 
     response = client.post(
         "/api/transactions/transfer",
@@ -399,13 +420,26 @@ def test_transfer_executes_with_server_calculated_low_risk(client):
         RiskAssessment.transaction_id == transaction.id
     ).one()
     assert assessment.transaction_score == 0
+    assert assessment.graph_score == 25
+    assert assessment.calculation_details["graph_included_in_final_score"] is True
+    assert assessment.calculation_details["weighted_contributions"]["graph"] == 5
     assert assessment.decision == "APPROVED"
+    graph_factor = db.query(RiskFactor).filter(
+        RiskFactor.risk_assessment_id == assessment.id,
+        RiskFactor.score_type == "GRAPH",
+    ).one()
+    assert graph_factor.reason_code == "COMMON_BENEFICIARY"
+    assert graph_factor.final_score_contribution == 5
+    assert synced_transactions == [transaction.id]
     assert db.get(Account, sender_id).balance == Decimal("49999000.00")
     assert db.get(Account, recipient_id).balance == Decimal("101000.00")
     db.close()
 
 
-def test_transfer_persists_risk_and_does_not_move_money_when_verification_required(client):
+def test_transfer_persists_risk_and_does_not_move_money_when_verification_required(
+    client,
+    monkeypatch,
+):
     now = datetime.now(timezone.utc)
     db = TestingSessionLocal()
     user, sender, recipient, session_id = create_risk_context(
@@ -414,13 +448,23 @@ def test_transfer_persists_risk_and_does_not_move_money_when_verification_requir
         account_age=timedelta(hours=12),
         login_age=timedelta(minutes=3),
     )
-    add_behavior_event(db, user.id, session_id, identity_score=30)
+    add_behavior_event(
+        db,
+        user.id,
+        session_id,
+        behavior_score=20,
+        identity_score=30,
+    )
     user_id = user.id
     sender_id = sender.id
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    monkeypatch.setattr(
+        "app.services.graph_risk_engine.analyze_graph_risk",
+        lambda _user_id: {"graph_score": 0, "reason_details": []},
+    )
 
     response = client.post(
         "/api/transactions/transfer",
@@ -457,10 +501,15 @@ def test_transfer_persists_risk_and_does_not_move_money_when_verification_requir
     db.close()
 
 
-def test_transfer_does_not_move_money_when_final_risk_is_high(client):
+def test_transfer_does_not_move_money_when_final_risk_is_high(client, monkeypatch):
     now = datetime.now(timezone.utc)
     db = TestingSessionLocal()
-    user, sender, recipient, session_id = create_risk_context(db, now)
+    user, sender, recipient, session_id = create_risk_context(
+        db,
+        now,
+        account_age=timedelta(hours=12),
+        login_age=timedelta(minutes=3),
+    )
     add_behavior_event(
         db,
         user.id,
@@ -474,6 +523,10 @@ def test_transfer_does_not_move_money_when_final_risk_is_high(client):
     recipient_number = recipient.account_number
     db.close()
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    monkeypatch.setattr(
+        "app.services.graph_risk_engine.analyze_graph_risk",
+        lambda _user_id: {"graph_score": 0, "reason_details": []},
+    )
 
     response = client.post(
         "/api/transactions/transfer",
@@ -481,7 +534,7 @@ def test_transfer_does_not_move_money_when_final_risk_is_high(client):
             "request_id": "00000000-0000-4000-8000-000000000304",
             "session_id": session_id,
             "recipient_account_number": recipient_number,
-            "amount": "1000.00",
+            "amount": "5000000.00",
         },
     )
 
