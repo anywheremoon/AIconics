@@ -1,11 +1,15 @@
+from neo4j.exceptions import ServiceUnavailable
 from sqlalchemy.orm import Session
 
+from app.models.account_model import Account
 from app.schemas.final_risk_schema import FinalRiskResult
 from app.services.account_service import stage_transfer_with_risk
+from app.services.graph_sync_service import sync_transfer
 from app.services.risk_decision_service import assess_final_risk
 from app.services.risk_gate_service import ensure_transaction_allowed
 from app.services.transaction_risk_engine import calculate_transaction_risk
 from app.services.transfer_behavior_service import get_latest_behavior_identity
+from app.services import graph_risk_engine
 
 
 def execute_assessed_transfer(
@@ -37,6 +41,14 @@ def execute_assessed_transfer(
         db.commit()
         db.refresh(transaction)
 
+        # Only completed transfers are facts in the transaction graph.
+        # Pending/review transactions must not influence later graph scores.
+        if transaction.status == "COMPLETED":
+            sender = db.get(Account, transaction.sender_account_id)
+            recipient = db.get(Account, transaction.recipient_account_id)
+            if sender is not None and recipient is not None:
+                sync_transfer(transaction, sender, recipient)
+
         return transaction
 
     except Exception:
@@ -59,6 +71,16 @@ def assess_and_execute_transfer(
         user_id=user_id,
         session_id=str(data.session_id),
     )
+    try:
+        graph_risk = graph_risk_engine.analyze_graph_risk(user_id)
+    except ServiceUnavailable:
+        # Graph infrastructure is an optional external dependency.  Preserve
+        # the existing three-domain decision when B is unavailable; None is
+        # persisted so an unavailable analysis is never mistaken for score 0.
+        graph_risk = {
+            "graph_score": None,
+            "reason_details": [],
+        }
     final_risk = assess_final_risk(
         behavior_score=behavior_identity["behavior_score"],
         identity_score=behavior_identity["identity_score"],
@@ -66,6 +88,8 @@ def assess_and_execute_transfer(
         behavior_reasons=behavior_identity["behavior_reasons"],
         identity_reasons=behavior_identity["identity_reasons"],
         transaction_reasons=transaction_risk["reason_details"],
+        graph_score=graph_risk["graph_score"],
+        graph_reasons=graph_risk["reason_details"],
     )
     return execute_assessed_transfer(
         db,

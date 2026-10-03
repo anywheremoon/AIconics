@@ -1,5 +1,7 @@
 from app.schemas.final_risk_schema import FinalRiskResult
-from app.services.risk_explanation_service import merge_risk_reasons
+from app.services.risk_explanation_service import (
+    merge_risk_reasons_with_deductions,
+)
 from app.services.score_combiner import (
     calculate_final_risk,
     validate_score,
@@ -72,33 +74,49 @@ def assess_final_risk(
 ) -> FinalRiskResult:
     """각 영역의 점수와 사유를 최종 위험 평가 결과로 묶는다."""
 
-    combined = calculate_final_risk(
-        behavior_score=behavior_score,
-        identity_score=identity_score,
-        transaction_score=transaction_score,
-    )
-
-    decision = decide_risk(
-        combined["final_risk_score"]
-    )
-
     checked_graph_score = (
         validate_score(graph_score, "graph_score")
         if graph_score is not None
         else None
     )
 
-    reasons = merge_risk_reasons(
+    reasons, duplicate_deductions = merge_risk_reasons_with_deductions(
         behavior_reasons or [],
         identity_reasons or [],
         transaction_reasons or [],
         graph_reasons or [],
     )
 
+    raw_scores = {
+        "BEHAVIOR": validate_score(behavior_score, "behavior_score"),
+        "IDENTITY": validate_score(identity_score, "identity_score"),
+        "TRANSACTION": validate_score(transaction_score, "transaction_score"),
+        "GRAPH": checked_graph_score,
+    }
+    effective_scores = {
+        score_type: max(
+            0.0,
+            score - duplicate_deductions.get(score_type, 0.0),
+        )
+        for score_type, score in raw_scores.items()
+        if score is not None
+    }
+
+    combined = calculate_final_risk(
+        behavior_score=effective_scores["BEHAVIOR"],
+        identity_score=effective_scores["IDENTITY"],
+        transaction_score=effective_scores["TRANSACTION"],
+        graph_score=effective_scores.get("GRAPH"),
+    )
+
+    decision = decide_risk(combined["final_risk_score"])
+
     return FinalRiskResult(
-        behavior_score=combined["behavior_score"],
-        identity_score=combined["identity_score"],
-        transaction_score=combined["transaction_score"],
+        # Persist original engine outputs.  Effective scores and deductions
+        # below make the no-double-count calculation auditable.
+        behavior_score=raw_scores["BEHAVIOR"],
+        identity_score=raw_scores["IDENTITY"],
+        transaction_score=raw_scores["TRANSACTION"],
         graph_score=checked_graph_score,
         normalized_behavior_score=(
             combined["normalized_behavior_score"]
@@ -109,6 +127,13 @@ def assess_final_risk(
         weighted_contributions=(
             combined["weighted_contributions"]
         ),
+        applied_weights=combined["applied_weights"],
+        effective_scores={
+            key.lower(): value for key, value in effective_scores.items()
+        },
+        duplicate_score_deductions={
+            key.lower(): value for key, value in duplicate_deductions.items()
+        },
         final_risk_score=decision["final_risk_score"],
         risk_level=decision["risk_level"],
         decision=decision["decision"],

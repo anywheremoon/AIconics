@@ -5,14 +5,43 @@ from app.models.risk_factor_model import RiskFactor
 from app.schemas.final_risk_schema import FinalRiskResult
 from app.services.score_combiner import (
     BEHAVIOR_RAW_MAX,
-    BEHAVIOR_WEIGHT,
     IDENTITY_RAW_MAX,
-    IDENTITY_WEIGHT,
-    TRANSACTION_WEIGHT,
 )
 
 
-POLICY_VERSION = "weighted_rules_v1"
+POLICY_VERSION = "weighted_rules_v3_normalized_graph_deduplicated"
+
+
+def _final_reason_contributions(
+    result: FinalRiskResult,
+) -> dict[tuple[str, str], float]:
+    """Allocate the actual capped final score across retained reasons."""
+    domain_totals: dict[str, float] = {}
+    for reason in result.reasons:
+        domain_totals[reason.score_type] = (
+            domain_totals.get(reason.score_type, 0.0)
+            + reason.score_contribution
+        )
+
+    weighted = result.weighted_contributions.model_dump()
+    weighted_total = sum(weighted.values())
+    cap_scale = (
+        result.final_risk_score / weighted_total
+        if weighted_total > 0
+        else 0.0
+    )
+
+    contributions = {}
+    for reason in result.reasons:
+        domain_total = domain_totals[reason.score_type]
+        domain_weighted = weighted[reason.score_type.lower()]
+        contributions[(reason.score_type, reason.reason_code)] = (
+            domain_weighted
+            * cap_scale
+            * reason.score_contribution
+            / domain_total
+        )
+    return contributions
 
 
 def create_risk_assessment(
@@ -40,6 +69,8 @@ def create_risk_assessment(
             "result는 FinalRiskResult여야 합니다."
         )
 
+    final_reason_contributions = _final_reason_contributions(result)
+
     assessment = RiskAssessment(
         transaction_id=transaction_id,
         behavior_score=result.behavior_score,
@@ -52,9 +83,7 @@ def create_risk_assessment(
         policy_version=POLICY_VERSION,
         calculation_details={
             "weights": {
-                "behavior": BEHAVIOR_WEIGHT,
-                "identity": IDENTITY_WEIGHT,
-                "transaction": TRANSACTION_WEIGHT,
+                **result.applied_weights,
             },
             "normalization_maxima": {
                 "behavior": BEHAVIOR_RAW_MAX,
@@ -69,9 +98,13 @@ def create_risk_assessment(
             "weighted_contributions": (
                 result.weighted_contributions.model_dump()
             ),
-            # 현재 공식은 Graph 점수를 저장하지만
-            # 최종 점수에는 포함하지 않음
-            "graph_included_in_final_score": False,
+            "effective_scores": result.effective_scores,
+            "duplicate_score_deductions": (
+                result.duplicate_score_deductions
+            ),
+            "graph_included_in_final_score": (
+                result.graph_score is not None
+            ),
         },
     )
 
@@ -88,9 +121,9 @@ def create_risk_assessment(
                 score_contribution=(
                     reason.score_contribution
                 ),
-                # 원점수 사유를 최종 가중 점수에 배분하는
-                # 정책은 아직 정하지 않았으므로 기록하지 않음
-                final_score_contribution=None,
+                final_score_contribution=final_reason_contributions[
+                    (reason.score_type, reason.reason_code)
+                ],
             )
         )
 

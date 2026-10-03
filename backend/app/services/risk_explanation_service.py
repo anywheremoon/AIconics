@@ -45,6 +45,11 @@ REASON_MESSAGES = {
     },
 }
 
+# These codes describe the same underlying fact even when different engines
+# report them.  The first domain in the final-evaluation order owns the score;
+# later domains keep no second contribution for that fact.
+CROSS_DOMAIN_DUPLICATE_REASON_CODES = frozenset({"SHARED_DEVICE"})
+
 
 def merge_risk_reasons(
     *reason_groups: list[dict],
@@ -89,6 +94,45 @@ def merge_risk_reasons(
             merged.append(copied)
 
     return merged
+
+
+def merge_risk_reasons_with_deductions(
+    *reason_groups: list[dict],
+) -> tuple[list[dict], dict[str, float]]:
+    """Merge reasons and report later cross-domain duplicate contributions.
+
+    Normal duplicate handling remains scoped to ``(score_type, reason_code)``.
+    For policy-declared cross-domain duplicates, the first occurrence wins and
+    the later contribution is returned so its domain score can be adjusted.
+    """
+    merged = merge_risk_reasons(*reason_groups)
+    result = []
+    owners: dict[str, str] = {}
+    deductions: dict[str, float] = {}
+
+    for reason in merged:
+        code = reason["reason_code"]
+        score_type = reason["score_type"]
+
+        if code not in CROSS_DOMAIN_DUPLICATE_REASON_CODES:
+            result.append(reason)
+            continue
+
+        owner = owners.get(code)
+        if owner is None:
+            owners[code] = score_type
+            result.append(reason)
+            continue
+
+        if owner == score_type:
+            # merge_risk_reasons already guarantees uniqueness in a domain.
+            continue
+
+        deductions[score_type] = deductions.get(score_type, 0.0) + float(
+            reason.get("score_contribution", 0.0)
+        )
+
+    return result, deductions
 
 
 def build_reasons(
