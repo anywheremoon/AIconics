@@ -356,3 +356,23 @@ export function getCurrentUser() {
     }
   );
 }
+
+export function logoutSession(accessToken, sessionId) {
+  if (!accessToken || !sessionId) {
+    throw new AuthApiError(
+      "로그아웃에 필요한 토큰 또는 세션 ID가 없습니다.",
+      400
+    );
+  }
+
+  return request("/api/auth/logout", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+    }),
+    signal: AbortSignal.timeout(10000),
+  });
+}
