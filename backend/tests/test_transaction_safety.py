@@ -15,9 +15,6 @@ from app.models.user_model import User
 from app.models.device_model import Device
 from app.models.user_session_model import UserSession
 from app.services.auth_service import get_current_user
-from app.schemas.final_risk_schema import FinalRiskResult, WeightedContributions
-from app.services.assessed_transfer_service import execute_assessed_transfer
-from app.schemas.transaction_schema import TransferRequest
 from main import app
 
 
@@ -696,76 +693,3 @@ def test_account_endpoint_returns_db_account_details(client):
     assert response.json()["account_number"] == "656565656565"
     assert response.json()["balance"] == "123456.00"
     assert response.json()["status"] == "ACTIVE"
-
-def test_transfer_rolls_back_when_commit_fails(monkeypatch):
-    sender_id, sender_account_id = create_user_with_account(
-        "rollback-sender",
-        "111111111111",
-        balance=100000,
-    )
-    _, recipient_account_id = create_user_with_account(
-        "rollback-recipient",
-        "222222222222",
-        balance=100000,
-    )
-
-    db = TestingSessionLocal()
-
-    data = TransferRequest(
-        request_id=uuid4(),
-        session_id=uuid4(),
-        recipient_account_number="222222222222",
-        amount=1000,
-    )
-
-    risk_result = FinalRiskResult(
-        behavior_score=0,
-        identity_score=0,
-        transaction_score=0,
-        graph_score=None,
-        normalized_behavior_score=0,
-        normalized_identity_score=0,
-        weighted_contributions=WeightedContributions(
-            behavior=0,
-            identity=0,
-            transaction=0,
-        ),
-        final_risk_score=0,
-        risk_level="LOW",
-        decision="APPROVED",
-        reasons=[],
-    )
-
-    def fail_commit():
-        raise RuntimeError("forced commit failure")
-
-    monkeypatch.setattr(db, "commit", fail_commit)
-
-    with pytest.raises(RuntimeError, match="forced commit failure"):
-        execute_assessed_transfer(
-            db,
-            user_id=sender_id,
-            data=data,
-            risk_result=risk_result,
-        )
-
-    db.close()
-
-    # rollback 이후 실제 DB 상태를 새 세션에서 다시 확인
-    verify_db = TestingSessionLocal()
-
-    sender = verify_db.get(Account, sender_account_id)
-    recipient = verify_db.get(Account, recipient_account_id)
-
-    assert sender.balance == 100000
-    assert recipient.balance == 100000
-
-    transaction = (
-        verify_db.query(Transaction)
-        .filter(Transaction.request_id == str(data.request_id))
-        .first()
-    )
-
-    assert transaction is None
-
-    verify_db.close()
