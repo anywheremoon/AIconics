@@ -629,9 +629,7 @@ def test_transfer_rejects_when_behavior_event_is_missing(client):
 
     db.close()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: SimpleNamespace(id=user_id)
-    )
+    authenticate_as(user_id, session_id)
 
     request_id = "00000000-0000-4000-8000-000000000305"
 
@@ -680,9 +678,7 @@ def test_transfer_rejects_inactive_sender_account(client):
     db.commit()
     db.close()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: SimpleNamespace(id=user_id)
-    )
+    authenticate_as(user_id, session_id)
 
     request_id = "00000000-0000-4000-8000-000000000306"
 
@@ -730,9 +726,7 @@ def test_transfer_rolls_back_when_risk_assessment_save_fails(
 
     db.close()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: SimpleNamespace(id=user_id)
-    )
+    authenticate_as(user_id, session_id)
 
     def fail_risk_assessment(*args, **kwargs):
         raise RuntimeError("forced risk assessment failure")
