@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -34,6 +35,15 @@ TestingSessionLocal = sessionmaker(
     autoflush=False,
     bind=engine,
 )
+
+
+def authenticate_as(user_id: int, session_id: str | None = None):
+    def override_get_current_user(request: Request):
+        if session_id is not None:
+            request.state.auth_session_id = session_id
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
 
 @pytest.fixture(autouse=True)
@@ -325,7 +335,7 @@ def test_transaction_risk_api_returns_authenticated_users_score(client):
     user_id = user.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id)
 
     response = client.post(
         "/api/risks/transaction",
@@ -349,7 +359,7 @@ def test_transaction_risk_api_rejects_another_users_session(client):
     user_id = user.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id)
 
     response = client.post(
         "/api/risks/transaction",
@@ -377,7 +387,7 @@ def test_transfer_executes_with_server_calculated_low_risk(client, monkeypatch):
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {
@@ -460,7 +470,7 @@ def test_transfer_persists_risk_and_does_not_move_money_when_verification_requir
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {"graph_score": 0, "reason_details": []},
@@ -522,7 +532,7 @@ def test_transfer_does_not_move_money_when_final_risk_is_high(client, monkeypatc
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {"graph_score": 0, "reason_details": []},
@@ -585,7 +595,7 @@ def test_transfer_rejects_historical_session_behavior_event(client):
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, old_session_id)
 
     response = client.post(
         "/api/transactions/transfer",

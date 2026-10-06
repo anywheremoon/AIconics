@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -89,10 +90,13 @@ def create_user_with_account(
     return user_id, account_id
 
 
-def authenticate_as(user_id: int):
-    app.dependency_overrides[get_current_user] = (
-        lambda: SimpleNamespace(id=user_id)
-    )
+def authenticate_as(user_id: int, session_id: str | None = None):
+    def override_get_current_user(request: Request):
+        if session_id is not None:
+            request.state.auth_session_id = session_id
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
 
 def test_insufficient_balance(client):
@@ -109,7 +113,7 @@ def test_insufficient_balance(client):
     )
 
     session_id = create_risk_event(sender_id, "LOW", 0)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -192,7 +196,7 @@ def test_transfer_to_same_account(client):
     )
 
     session_id = create_risk_event(user_id, "LOW", 0)
-    authenticate_as(user_id)
+    authenticate_as(user_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -214,7 +218,7 @@ def test_transfer_to_nonexistent_account(client):
     )
 
     session_id = create_risk_event(user_id, "LOW", 0)
-    authenticate_as(user_id)
+    authenticate_as(user_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -243,7 +247,7 @@ def test_duplicate_request_id_does_not_double_charge(client):
     )
 
     session_id = create_risk_event(sender_id, "LOW", 0)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     request_data = {
         "request_id": "00000000-0000-4000-8000-000000000008",
@@ -359,7 +363,7 @@ def test_low_risk_user_can_transfer(client):
     )
 
     session_id = create_risk_event(sender_id, "LOW", 20)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -386,7 +390,7 @@ def test_medium_risk_user_cannot_transfer(client):
     )
 
     session_id = create_risk_event(sender_id, "MEDIUM", 50)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -413,7 +417,7 @@ def test_high_risk_user_cannot_transfer(client):
     )
 
     session_id = create_risk_event(sender_id, "HIGH", 80)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -451,7 +455,7 @@ def test_transfer_uses_latest_risk_event(client):
 
     create_risk_event(sender_id, "HIGH", 80)
     session_id = create_risk_event(sender_id, "LOW", 20)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -478,7 +482,7 @@ def test_transfer_blocks_when_latest_risk_event_became_high(client):
 
     low_session_id = create_risk_event(sender_id, "LOW", 20)
     create_risk_event(sender_id, "HIGH", 80)
-    authenticate_as(sender_id)
+    authenticate_as(sender_id, low_session_id)
 
     response = client.post(
         "/api/transactions/transfer",

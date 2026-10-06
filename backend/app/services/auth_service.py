@@ -19,9 +19,13 @@ from app.models.login_history_model import LoginHistory
 from app.models.user_session_model import UserSession
 from app.repositories import user_repository
 from app.services import user_profile_service
-from app.models.event_model import Event
 from app.repositories import account_repository
 from app.repositories import transaction_repository
+from app.services.graph_sync_service import (
+    sync_login,
+    sync_registration,
+    sync_user_deletion,
+)
 
 
 PASSWORD_ITERATIONS = 600_000

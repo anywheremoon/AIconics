@@ -5,7 +5,7 @@ import os
 # Backend API 설정
 # ==========================================
 
-BACKEND_URL = "http://192.168.35.210:8000"
+BACKEND_URL = "http://172.19.22.158:8000"
 
 API_URL = f"{BACKEND_URL}/api/events"
 
