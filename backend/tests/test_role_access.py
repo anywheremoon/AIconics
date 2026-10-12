@@ -1,4 +1,5 @@
 import pytest
+import main
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -6,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.repositories import user_repository
+from app.services import auth_service
 from app.services.auth_service import hash_password
 from app.models.device_model import Device
 from app.models.event_model import Event
@@ -22,9 +24,13 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 
 @pytest.fixture(autouse=True)
-def reset_database():
+def reset_database(monkeypatch):
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    monkeypatch.setattr(main, "engine", engine)
+    monkeypatch.setattr(auth_service, "PASSWORD_ITERATIONS", 1_000)
+    monkeypatch.setattr(auth_service, "sync_login", lambda *args: None)
+    monkeypatch.setenv("EXPOSE_VERIFICATION_CODE", "true")
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -66,9 +72,31 @@ def create_user(db, username: str, password: str = "password1234", role: str = "
 
 
 def login(client: TestClient, username: str, password: str = "password1234"):
-    return client.post(
+    login_response = client.post(
         "/api/auth/login",
-        json={"username": username, "password": password},
+        json={
+            "username": username,
+            "password": password,
+            "device_id": f"role-test-device-{username}",
+        },
+    )
+    body = login_response.json()
+    if body.get("login_status") != "REQUIRE_VERIFICATION":
+        return login_response
+
+    headers = {
+        "Authorization": f"Bearer {body['verification_token']}"
+    }
+    issue_response = client.post(
+        "/api/auth/verification/request",
+        json={"session_id": body["session_id"]},
+        headers=headers,
+    )
+    code = issue_response.json()["verification_code"]
+    return client.post(
+        "/api/auth/verification/confirm",
+        json={"session_id": body["session_id"], "code": code},
+        headers=headers,
     )
 
 
@@ -272,4 +300,4 @@ def test_admin_can_get_event_detail(client, db):
         "score_type": "IDENTITY",
         "score_contribution": 25,
         }
-    ]  
+    ]
