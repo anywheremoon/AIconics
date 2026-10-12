@@ -5,13 +5,14 @@ from app.services.llm_service import (
 
 
 LOGIN_STATUSES = {
-    "SUCCESS",
+    "AUTHENTICATED",
     "REQUIRE_VERIFICATION",
     "PENDING",
 }
 
+
 DEFAULT_GUIDANCE = {
-    "SUCCESS": {
+    "AUTHENTICATED": {
         "summary": "로그인이 정상적으로 완료되었습니다.",
         "next_action": "서비스를 이용하실 수 있습니다.",
     },
@@ -24,6 +25,7 @@ DEFAULT_GUIDANCE = {
         "next_action": "잠시 후 다시 시도하거나 관리자에게 문의해 주세요.",
     },
 }
+
 
 REASON_DESCRIPTIONS = {
     "NEW_DEVICE": "평소 사용하지 않던 새로운 기기에서 로그인했습니다.",
@@ -77,7 +79,10 @@ def generate_security_guidance(
     audience = "보안 관리자" if is_admin else "일반 사용자"
 
     reasons = [
-        REASON_DESCRIPTIONS.get(code, "보안 확인이 필요합니다.")
+        REASON_DESCRIPTIONS.get(
+            code,
+            "보안 확인이 필요합니다.",
+        )
         for code in reason_codes
     ]
 
