@@ -8,359 +8,344 @@ import config
 from collectors.device_collector import get_device_info
 
 
+ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
+
+
 class AuthHandler(BaseHTTPRequestHandler):
 
+    # ==========================================
+    # CORS
+    # ==========================================
     def _set_cors_headers(self):
-        self.send_header(
-            "Access-Control-Allow-Origin",
-            "http://localhost:5173"
-        )
+        origin = self.headers.get("Origin")
+
+        if origin in ALLOWED_ORIGINS:
+            self.send_header(
+                "Access-Control-Allow-Origin",
+                origin,
+            )
+            self.send_header("Vary", "Origin")
 
         self.send_header(
             "Access-Control-Allow-Methods",
-            "GET, POST, DELETE, OPTIONS"
+            "GET, POST, DELETE, OPTIONS",
         )
 
         self.send_header(
             "Access-Control-Allow-Headers",
-            "Content-Type"
+            "Content-Type",
         )
+
+    # ==========================================
+    # 공통 JSON 응답
+    # ==========================================
+    def _respond(self, status_code, payload):
+        body = json.dumps(
+            payload,
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+        self.send_response(status_code)
+        self._set_cors_headers()
+
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8",
+        )
+
+        self.send_header(
+            "Content-Length",
+            str(len(body)),
+        )
+
+        self.send_header(
+            "Cache-Control",
+            "no-store",
+        )
+
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ==========================================
+    # 브라우저 요청 Origin 확인
+    # Origin 없는 로컬 요청은 허용
+    # ==========================================
+    def _check_origin(self):
+        origin = self.headers.get("Origin")
+
+        if origin is not None and origin not in ALLOWED_ORIGINS:
+            self._respond(
+                403,
+                {"error": "허용되지 않은 요청 출처입니다."},
+            )
+            return False
+
+        return True
 
     # ==========================================
     # CORS Preflight
     # ==========================================
     def do_OPTIONS(self):
+        if not self._check_origin():
+            return
 
-        self.send_response(200)
+        if self.path not in ("/device-info", "/agent-auth"):
+            self._respond(
+                404,
+                {"error": "요청 경로를 찾을 수 없습니다."},
+            )
+            return
 
+        self.send_response(204)
         self._set_cors_headers()
-
         self.end_headers()
 
     # ==========================================
-    # React에서 현재 PC의 device_id 조회
+    # 현재 PC 장치 정보 조회
     # ==========================================
     def do_GET(self):
+        if not self._check_origin():
+            return
 
         if self.path != "/device-info":
-
-            self.send_response(404)
-
-            self._set_cors_headers()
-
-            self.end_headers()
-
+            self._respond(
+                404,
+                {"error": "요청 경로를 찾을 수 없습니다."},
+            )
             return
 
         try:
-
             device_info = get_device_info()
 
             response_data = {
-                "device_id":
-                    device_info["device_id"],
-
-                "location":
-                    config.LOCATION,
+                "device_id": device_info["device_id"],
+                "location": config.LOCATION,
             }
 
-            print(
-                "\nDevice 정보 요청 수신"
+        except Exception:
+            self._respond(
+                500,
+                {"error": "Agent 장치 정보 조회에 실패했습니다."},
             )
-
-            print(
-                f"Device ID : "
-                f"{response_data['device_id']}"
-            )
-
-            self.send_response(200)
-
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
-            )
-
-            self.end_headers()
-
-            self.wfile.write(
-                json.dumps(
-                    response_data
-                ).encode("utf-8")
-            )
-
-        except Exception as e:
-
-            self.send_response(500)
-
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
-            )
-
-            self.end_headers()
-
-            self.wfile.write(
-                json.dumps({
-                    "error": str(e)
-                }).encode("utf-8")
-            )
-
-    # ==========================================
-    # React 로그인 후
-    # JWT / session_id 수신
-    # ==========================================
-    def do_POST(self):
-
-        if self.path != "/agent-auth":
-
-            self.send_response(404)
-
-            self._set_cors_headers()
-
-            self.end_headers()
-
             return
 
-        content_length = int(
-            self.headers.get(
-                "Content-Length",
-                0
-            )
-        )
+        print("\nDevice 정보 요청 수신")
+        print(f"Device ID : {response_data['device_id']}")
 
-        body = self.rfile.read(
-            content_length
-        )
+        self._respond(200, response_data)
+
+    # ==========================================
+    # 최종 로그인 토큰·세션 수신
+    # 백엔드 검증 성공 후 저장
+    # ==========================================
+    def do_POST(self):
+        if not self._check_origin():
+            return
+
+        if self.path != "/agent-auth":
+            self._respond(
+                404,
+                {"error": "요청 경로를 찾을 수 없습니다."},
+            )
+            return
 
         try:
-
-            data = json.loads(
-                body.decode("utf-8")
+            content_length = int(
+                self.headers.get("Content-Length", "0")
             )
 
-            access_token = data.get(
-                "access_token"
-            )
+            if not 0 < content_length <= 65536:
+                raise ValueError(
+                    "인증 요청 본문 크기가 올바르지 않습니다."
+                )
 
-            session_id = data.get(
-                "session_id"
-            )
+            body = self.rfile.read(content_length)
+            data = json.loads(body.decode("utf-8"))
+
+            if not isinstance(data, dict):
+                raise ValueError(
+                    "인증 요청은 JSON 객체여야 합니다."
+                )
+
+            access_token = data.get("access_token")
+            session_id = data.get("session_id")
+
+            if not isinstance(access_token, str):
+                raise ValueError(
+                    "access_token은 문자열이어야 합니다."
+                )
+
+            if not isinstance(session_id, str):
+                raise ValueError(
+                    "session_id는 문자열이어야 합니다."
+                )
+
+            access_token = access_token.strip()
+            session_id = session_id.strip()
 
             if not access_token:
-
                 raise ValueError(
                     "access_token이 없습니다."
                 )
 
-            if not session_id:
-
+            if not session_id or len(session_id) > 36:
                 raise ValueError(
-                    "session_id가 없습니다."
+                    "session_id가 올바르지 않습니다."
                 )
 
-            access_token = (
-                access_token.strip()
+        except (ValueError, UnicodeDecodeError):
+            self._respond(
+                400,
+                {
+                    "error":
+                        "토큰·세션 또는 JSON 형식이 올바르지 않습니다."
+                },
+            )
+            return
+
+        # 새 인증을 검증하는 동안 이전 인증정보 제거
+        config.clear_agent_auth()
+
+        try:
+            auth_test = requests.get(
+                f"{config.BACKEND_URL}/api/auth/me",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                },
+                timeout=config.REQUEST_TIMEOUT,
+                allow_redirects=False,
             )
 
-            session_id = (
-                session_id.strip()
+        except requests.RequestException:
+            print("Agent JWT 검증 요청 실패")
+
+            self._respond(
+                503,
+                {
+                    "error":
+                        "백엔드에 연결할 수 없어 Agent 인증을 저장하지 않았습니다."
+                },
             )
+            return
 
-            # ==================================
-            # Agent 인증정보 저장
-            # ==================================
-            config.set_agent_auth(
-                access_token,
-                session_id
+        print(
+            "Agent JWT 검증 상태 :",
+            auth_test.status_code,
+        )
+
+        if auth_test.status_code in (401, 403):
+            self._respond(
+                auth_test.status_code,
+                {
+                    "error":
+                        "최종 로그인 인증을 확인할 수 없습니다."
+                },
             )
+            return
 
-            print(
-                "\nAgent 인증정보 수신 완료"
+        if auth_test.status_code != 200:
+            self._respond(
+                502,
+                {
+                    "error":
+                        "백엔드 인증 확인에 실패했습니다."
+                },
             )
-
-            print(
-                f"Session ID : "
-                f"{session_id}"
-            )
-
-            # 토큰 전체는 출력하지 않음
-            print(
-                f"Token length : "
-                f"{len(access_token)}"
-            )
-
-            print(
-                f"Token prefix : "
-                f"{access_token[:20]}..."
-            )
-
-            print(
-                f"Token suffix : "
-                f"...{access_token[-20:]}"
-            )
-
-            # ==================================
-            # 받은 JWT가 중앙 Backend에서
-            # 유효한지 확인
-            #
-            # 기존:
-            # http://127.0.0.1:8000/api/auth/me
-            #
-            # 변경:
-            # config.BACKEND_URL 사용
-            # ==================================
-            try:
-
-                auth_test = requests.get(
-                    f"{config.BACKEND_URL}/api/auth/me",
-
-                    headers={
-                        "Authorization":
-                            f"Bearer {access_token}"
-                    },
-
-                    timeout=config.REQUEST_TIMEOUT
-                )
-
-                print(
-                    "Agent JWT 검증 상태 :",
-                    auth_test.status_code
-                )
-
-                print(
-                    "Agent JWT 검증 응답 :",
-                    auth_test.text
-                )
-
-            except requests.RequestException as e:
-
-                print(
-                    "Agent JWT 검증 요청 실패 :",
-                    e
-                )
-
-            self.send_response(200)
-
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
-            )
-
-            self.end_headers()
-
-            self.wfile.write(
-                json.dumps({
-                    "status": "ok"
-                }).encode("utf-8")
-            )
-
-        except Exception as e:
-
-            self.send_response(400)
-
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
-            )
-
-            self.end_headers()
-
-            self.wfile.write(
-                json.dumps({
-                    "error": str(e)
-                }).encode("utf-8")
-            )
-
-    # ==========================================
-    # React 로그아웃 후
-    # Agent 인증정보 제거
-    # ==========================================
-    def do_DELETE(self):
-
-        if self.path != "/agent-auth":
-
-            self.send_response(404)
-
-            self._set_cors_headers()
-
-            self.end_headers()
-
             return
 
         try:
+            current_user = auth_test.json()
 
-            # Agent 인증정보 제거
+            if (
+                not isinstance(current_user, dict)
+                or current_user.get("id") is None
+                or current_user.get("role") not in ("USER", "ADMIN")
+            ):
+                raise ValueError(
+                    "사용자 응답 형식이 올바르지 않습니다."
+                )
+
+        except ValueError:
+            self._respond(
+                502,
+                {
+                    "error":
+                        "백엔드 사용자 응답 형식이 올바르지 않습니다."
+                },
+            )
+            return
+
+        try:
+            # 검증 성공 후에만 인증정보 저장
+            config.set_agent_auth(
+                access_token,
+                session_id,
+            )
+
+        except Exception:
             config.clear_agent_auth()
 
-            print(
-                "\nAgent 로그아웃 정보 수신"
+            self._respond(
+                500,
+                {"error": "Agent 인증정보 저장에 실패했습니다."},
             )
+            return
 
-            print(
-                "Agent 인증정보 제거 완료"
+        # 토큰 값은 출력하지 않는다.
+        print("\nAgent 최종 인증정보 수신 완료")
+        print(f"Session ID : {session_id}")
+
+        self._respond(
+            200,
+            {"status": "ok"},
+        )
+
+    # ==========================================
+    # 로그아웃·인증 대기 전환 시 인증정보 제거
+    # ==========================================
+    def do_DELETE(self):
+        if not self._check_origin():
+            return
+
+        if self.path != "/agent-auth":
+            self._respond(
+                404,
+                {"error": "요청 경로를 찾을 수 없습니다."},
             )
+            return
 
-            self.send_response(200)
+        try:
+            config.clear_agent_auth()
 
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
+        except Exception:
+            self._respond(
+                500,
+                {"error": "Agent 인증정보 제거에 실패했습니다."},
             )
+            return
 
-            self.end_headers()
+        print("\nAgent 로그아웃 정보 수신")
+        print("Agent 인증정보 제거 완료")
 
-            self.wfile.write(
-                json.dumps({
-                    "status": "logged_out"
-                }).encode("utf-8")
-            )
-
-        except Exception as e:
-
-            self.send_response(500)
-
-            self._set_cors_headers()
-
-            self.send_header(
-                "Content-Type",
-                "application/json"
-            )
-
-            self.end_headers()
-
-            self.wfile.write(
-                json.dumps({
-                    "error": str(e)
-                }).encode("utf-8")
-            )
+        self._respond(
+            200,
+            {"status": "logged_out"},
+        )
 
 
 def start_auth_receiver():
-
-    # ==========================================
-    # 이 주소는 변경하지 않음
-    #
-    # React와 Agent는 같은 사용자 PC에서
-    # 실행되므로 localhost로 통신
-    # ==========================================
+    # React와 Agent는 같은 사용자 PC에서 통신
     server = HTTPServer(
         ("127.0.0.1", 8765),
-        AuthHandler
+        AuthHandler,
     )
 
     thread = threading.Thread(
         target=server.serve_forever,
-        daemon=True
+        daemon=True,
     )
 
     thread.start()

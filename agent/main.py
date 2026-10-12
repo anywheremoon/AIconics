@@ -16,39 +16,53 @@ from services.api_sender import send_event
 from services.auth_receiver import start_auth_receiver
 
 
-def collect_behavior_data(duration=30):
-    """마우스, 클릭, 키보드 데이터를 동시에 수집한다."""
+def collect_behavior_data(duration, stop_event):
+    """동시에 행동 데이터를 수집하고, 중지되면 결과를 폐기한다."""
+
+    if stop_event.is_set():
+        return None
 
     with ThreadPoolExecutor(max_workers=3) as executor:
-        mouse_future = executor.submit(collect_mouse, duration)
-        click_future = executor.submit(collect_click, duration)
-        keyboard_future = executor.submit(collect_keyboard, duration)
+        futures = [
+            executor.submit(
+                collect_mouse,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+            executor.submit(
+                collect_click,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+            executor.submit(
+                collect_keyboard,
+                duration=duration,
+                stop_event=stop_event,
+            ),
+        ]
 
-        mouse_data = mouse_future.result()
-        click_data = click_future.result()
-        keyboard_data = keyboard_future.result()
+        try:
+            results = [
+                future.result()
+                for future in futures
+            ]
+        except BaseException:
+            stop_event.set()
+            raise
+
+    if stop_event.is_set():
+        return None
 
     return {
-        **mouse_data,
-        **click_data,
-        **keyboard_data,
+        **results[0],
+        **results[1],
+        **results[2],
     }
-
-
-def auth_is_unchanged(access_token, session_id):
-    """수집 시작 시점의 인증정보가 유지되는지 확인한다."""
-
-    return (
-        bool(config.ACCESS_TOKEN)
-        and bool(config.SESSION_ID)
-        and config.ACCESS_TOKEN == access_token
-        and config.SESSION_ID == session_id
-    )
 
 
 def main():
     print("=" * 50)
-    print("Behavior Agent Started")
+    print("행동 데이터 Agent 시작")
     print("=" * 50)
 
     start_auth_receiver()
@@ -56,66 +70,79 @@ def main():
     last_auth_state = None
 
     while True:
-        # 로그인 전에는 수집하지 않고 대기한다.
-        if not config.ACCESS_TOKEN:
-            if last_auth_state != "WAITING_TOKEN":
+        # 인증정보 조회와 수집 중지 신호 등록
+        collection = config.begin_collection()
+
+        if collection is None:
+            if last_auth_state != "WAITING_AUTH":
                 print("사용자 로그인 인증정보를 기다리는 중...")
-                last_auth_state = "WAITING_TOKEN"
+                last_auth_state = "WAITING_AUTH"
 
-            time.sleep(1)
+            time.sleep(0.5)
             continue
 
-        # Session ID가 없으면 대기한다.
-        if not config.SESSION_ID:
-            if last_auth_state != "WAITING_SESSION":
-                print("Session ID를 기다리는 중...")
-                last_auth_state = "WAITING_SESSION"
-
-            time.sleep(1)
-            continue
-
-        collection_token = config.ACCESS_TOKEN
-        collection_session = config.SESSION_ID
+        (
+            collection_token,
+            collection_session,
+            collection_version,
+            stop_event,
+        ) = collection
 
         current_auth_state = (
-            "AUTHENTICATED",
             collection_session,
+            collection_version,
         )
 
-        # 같은 Session에서는 인증 완료 메시지를 한 번만 출력한다.
         if last_auth_state != current_auth_state:
             print("\nAgent 인증 완료")
             print(f"Session ID : {collection_session}")
             last_auth_state = current_auth_state
 
-        print("\n행동 데이터 수집 중...")
-
         try:
+            print("\n행동 데이터 수집 중...")
+
             behavior_data = collect_behavior_data(
-                duration=config.SEND_INTERVAL
+                duration=config.SEND_INTERVAL,
+                stop_event=stop_event,
             )
 
-            # 수집 중 로그아웃 또는 인증정보 변경 시 데이터를 폐기한다.
-            if not auth_is_unchanged(
-                collection_token,
-                collection_session,
+            # 로그아웃 또는 인증 변경 시 수집 결과 폐기
+            if (
+                behavior_data is None
+                or not config.auth_is_current(
+                    collection_token,
+                    collection_session,
+                    collection_version,
+                )
             ):
                 print(
                     "인증정보 변경 감지 - "
-                    "수집한 데이터는 전송하지 않습니다."
+                    "수집을 중지하고 데이터를 폐기했습니다."
                 )
                 continue
 
-            device_data = get_device_info()
-            timestamp = get_timestamp()
-
             event = create_event(
                 behavior_data=behavior_data,
-                device_data=device_data,
-                timestamp=timestamp,
+                device_data=get_device_info(),
+                timestamp=get_timestamp(),
             )
 
             event["session_id"] = collection_session
+
+            # 이벤트 생성 중 인증이 변경됐는지 재확인
+            if (
+                stop_event.is_set()
+                or not config.auth_is_current(
+                    collection_token,
+                    collection_session,
+                    collection_version,
+                )
+            ):
+                print(
+                    "인증정보 변경 감지 - "
+                    "이벤트를 전송하지 않습니다."
+                )
+                continue
 
             print("JSON 생성 완료")
             print(
@@ -126,33 +153,34 @@ def main():
                 )
             )
 
-            # 서버 전송 직전에 인증정보를 다시 확인한다.
-            if not auth_is_unchanged(
-                collection_token,
-                collection_session,
-            ):
-                print(
-                    "인증정보 변경 감지 - "
-                    "서버 전송을 중단합니다."
-                )
-                continue
-
-            success = send_event(event)
+            # 수집 시작 시점의 토큰과 세션으로 전송
+            success = send_event(
+                event,
+                access_token=collection_token,
+                session_id=collection_session,
+                auth_version=collection_version,
+            )
 
             if success:
                 print("서버 전송 완료")
             else:
-                print("서버 전송 실패")
-
-            print("다음 행동 데이터를 수집합니다.")
+                print("서버 전송 실패 또는 전송 취소")
 
         except Exception as error:
-            print(f"행동 데이터 수집 또는 전송 오류: {error}")
+            print(
+                f"행동 데이터 수집 또는 전송 오류: {error}"
+            )
             time.sleep(1)
+
+        finally:
+            # 종료·예외 상황에서도 수집 중지 및 등록 해제
+            stop_event.set()
+            config.end_collection(stop_event)
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\nBehavior Agent 종료")
+        config.clear_agent_auth()
+        print("\n행동 데이터 Agent 종료")
