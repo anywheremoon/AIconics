@@ -19,11 +19,11 @@ from app.routes import (
     events,
     graph,
     risk_score,
+    security_guidance,
     transaction_risk,
     transactions,
     user_profiles,
 )
-
 
 # ================================
 # FastAPI 애플리케이션 생성
@@ -80,6 +80,7 @@ app.include_router(transaction_risk.router)
 app.include_router(events.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
+app.include_router(security_guidance.router)
 
 
 # ================================
