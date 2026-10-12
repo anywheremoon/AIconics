@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.final_risk_schema import FinalRiskReason
+
 
 class TransactionRiskRequest(BaseModel):
     session_id: UUID
@@ -26,3 +28,4 @@ class TransactionRiskResponse(BaseModel):
     projected_1_hour_amount: Decimal = Field(gt=0)
     recent_incoming_amount: Decimal = Field(ge=0)
     reasons: list[str]
+    reason_details: list[FinalRiskReason]

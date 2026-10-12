@@ -106,7 +106,6 @@ def test_available_profile_affects_risk(_detect_anomaly):
     assert result["risk_score"] == 70
     assert result["profile_deviation_score"] == 70
 
-
 @patch("app.services.risk_engine.detect_anomaly", side_effect=_normal_ml_result)
 def test_shared_device_affects_identity_risk(_detect_anomaly):
     result = calculate_risk_score(
@@ -123,4 +122,3 @@ def test_shared_device_affects_identity_risk(_detect_anomaly):
     assert {reason["reason_code"] for reason in result["reasons"]} == {
         "SHARED_DEVICE",
     }
-

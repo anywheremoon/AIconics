@@ -27,7 +27,7 @@ def calculate_transaction_velocity(
     *,
     now: datetime,
 ) -> dict:
-    """Calculate outgoing transfer velocity including the proposed transfer."""
+    """Calculate recent transfer velocity including the proposed transfer."""
     common_filters = (
         Transaction.sender_account_id == sender_account_id,
         Transaction.transaction_type == "TRANSFER",
@@ -90,6 +90,11 @@ def calculate_transaction_velocity(
 
     return {
         "velocity_score": score,
+        "reason_contributions": {
+            "VELOCITY_HIGH_FREQUENCY": VELOCITY_HIGH_FREQUENCY_SCORE,
+            "VELOCITY_HIGH_AMOUNT": VELOCITY_HIGH_AMOUNT_SCORE,
+            "RAPID_BALANCE_DRAIN": RAPID_BALANCE_DRAIN_SCORE,
+        },
         "recent_10_minute_count": int(recent_count),
         "projected_10_minute_count": projected_count,
         "recent_1_hour_amount": recent_amount,

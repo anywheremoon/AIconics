@@ -41,9 +41,15 @@ export async function getTransactions() {
 }
 
 export async function transferMoney(data) {
+  const sessionId = data.session_id || localStorage.getItem("session_id");
+
+  if (!sessionId) {
+    throw new Error("로그인 세션을 찾을 수 없습니다. 다시 로그인해 주세요.");
+  }
+
   return request("/api/transactions/transfer", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, session_id: sessionId }),
   });
 }
 

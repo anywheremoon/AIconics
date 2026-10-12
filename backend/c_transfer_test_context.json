@@ -1,0 +1,13 @@
+{
+  "user_id": 14,
+  "username": "c_test_714546bea0aa",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsImlhdCI6MTc5MDk0MDAxOCwiZXhwIjoxNzkwOTQzNjE4fQ.nlSoYYYM-pzrFJ0EnCtHnnb72ulbfsZcjaFsJAZFPso",
+  "session_id": "4e9ed27d-73ef-490c-a0ba-a7bd281c079e",
+  "event_id": 513,
+  "sender_account": "512255408173",
+  "recipient_account": "841240055105",
+  "sender_balance": "100000.00",
+  "recipient_balance": "100000.00",
+  "transfer_request_id": "a6cd66ff-bd65-4384-bdd7-f7329a0fd610",
+  "transaction_id": 22
+}

@@ -22,6 +22,18 @@ SHORTLY_AFTER_LOGIN_MAX_MINUTES = 5
 HIGH_AMOUNT_THRESHOLD = Decimal("5000000.00")
 UNUSUAL_AMOUNT_MULTIPLIER = Decimal("3")
 
+TRANSACTION_REASON_DESCRIPTIONS = {
+    "NEW_ACCOUNT": "The sender account was opened recently.",
+    "NEW_RECIPIENT": "This is the first completed transfer to the recipient.",
+    "TRANSFER_SHORTLY_AFTER_LOGIN": "The transfer was requested shortly after login.",
+    "HIGH_AMOUNT_TRANSFER": "The transfer amount exceeds the high-value threshold.",
+    "UNUSUALLY_LARGE_TRANSFER": "The amount is unusually large for this sender.",
+    "NEW_ACCOUNT_HIGH_AMOUNT": "A high-value transfer was requested from a new account.",
+    "VELOCITY_HIGH_FREQUENCY": "Many transfers occurred within ten minutes.",
+    "VELOCITY_HIGH_AMOUNT": "The one-hour transfer total exceeds the threshold.",
+    "RAPID_BALANCE_DRAIN": "Most of the balance is being transferred after recent incoming funds.",
+}
+
 
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
@@ -58,6 +70,21 @@ def _average_transfer_amount(db: Session, sender_account_id: int) -> Decimal | N
         .scalar()
     )
     return None if average is None else Decimal(str(average))
+
+
+def _build_reason_details(
+    reason_codes: list[str],
+    contributions: dict[str, int],
+) -> list[dict]:
+    return [
+        {
+            "reason_code": reason_code,
+            "description": TRANSACTION_REASON_DESCRIPTIONS[reason_code],
+            "score_type": "TRANSACTION",
+            "score_contribution": contributions[reason_code],
+        }
+        for reason_code in reason_codes
+    ]
 
 
 def calculate_transaction_risk(
@@ -105,6 +132,7 @@ def calculate_transaction_risk(
         0,
     )
     account_age_days = int(account_age_seconds // 86400)
+    is_new_account = account_age_seconds <= NEW_ACCOUNT_MAX_AGE_DAYS * 86400
     minutes_after_login = max(
         (scoring_time - _utc(user_session.login_at)).total_seconds() / 60,
         0,
@@ -118,7 +146,7 @@ def calculate_transaction_risk(
     average_transfer_amount = _average_transfer_amount(db, sender.id)
     is_high_amount = amount >= HIGH_AMOUNT_THRESHOLD
     is_new_account_high_amount = (
-        account_age_days <= NEW_ACCOUNT_MAX_AGE_DAYS and is_high_amount
+        is_new_account and is_high_amount
     )
     is_unusually_large = (
         average_transfer_amount is not None
@@ -127,8 +155,16 @@ def calculate_transaction_risk(
 
     score = 0
     reasons = []
+    contributions = {
+        "NEW_ACCOUNT": NEW_ACCOUNT_SCORE,
+        "NEW_RECIPIENT": NEW_RECIPIENT_SCORE,
+        "TRANSFER_SHORTLY_AFTER_LOGIN": SHORTLY_AFTER_LOGIN_SCORE,
+        "HIGH_AMOUNT_TRANSFER": HIGH_AMOUNT_SCORE,
+        "UNUSUALLY_LARGE_TRANSFER": UNUSUALLY_LARGE_AMOUNT_SCORE,
+        "NEW_ACCOUNT_HIGH_AMOUNT": NEW_ACCOUNT_HIGH_AMOUNT_SCORE,
+    }
 
-    if account_age_days <= NEW_ACCOUNT_MAX_AGE_DAYS:
+    if is_new_account:
         score += NEW_ACCOUNT_SCORE
         reasons.append("NEW_ACCOUNT")
 
@@ -161,6 +197,7 @@ def calculate_transaction_risk(
     )
     score += velocity["velocity_score"]
     reasons.extend(velocity["reasons"])
+    contributions.update(velocity["reason_contributions"])
 
     return {
         "transaction_score": min(max(score, 0), 100),
@@ -178,4 +215,5 @@ def calculate_transaction_risk(
         "projected_1_hour_amount": velocity["projected_1_hour_amount"],
         "recent_incoming_amount": velocity["recent_incoming_amount"],
         "reasons": reasons,
+        "reason_details": _build_reason_details(reasons, contributions),
     }

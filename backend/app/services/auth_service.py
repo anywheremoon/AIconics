@@ -8,7 +8,7 @@ import secrets
 import warnings
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,7 +26,15 @@ from app.repositories import transaction_repository
 
 
 PASSWORD_ITERATIONS = 600_000
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+
+ACCESS_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
+)
+
+VERIFICATION_TOKEN_EXPIRE_MINUTES = int(
+    os.getenv("VERIFICATION_TOKEN_EXPIRE_MINUTES", "10")
+)
+
 JWT_SECRET = os.getenv("JWT_SECRET_KEY")
 if not JWT_SECRET:
     JWT_SECRET = secrets.token_urlsafe(48)
@@ -66,11 +74,13 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, session_id: str) -> str:
     now = datetime.now(timezone.utc)
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "sub": str(user_id),
+        "session_id": str(session_id),
+        "purpose": "access",
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()),
     }
@@ -81,7 +91,34 @@ def create_access_token(user_id: int) -> str:
     return f"{encoded_header}.{encoded_payload}.{_b64encode(signature)}"
 
 
-def verify_access_token(token: str) -> int:
+def create_verification_token(user_id: int, session_id: str) -> str:
+    """Issue a token that is accepted only by pre-authentication APIs."""
+    now = datetime.now(timezone.utc)
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "sub": str(user_id),
+        "session_id": str(session_id),
+        "purpose": "verification",
+        "iat": int(now.timestamp()),
+        "exp": int(
+            (now + timedelta(minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES)).timestamp()
+        ),
+    }
+    encoded_header = _b64encode(
+        json.dumps(header, separators=(",", ":")).encode()
+    )
+    encoded_payload = _b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    )
+    signing_input = f"{encoded_header}.{encoded_payload}".encode()
+    signature = hmac.new(
+        JWT_SECRET.encode(), signing_input, hashlib.sha256
+    ).digest()
+    return f"{encoded_header}.{encoded_payload}.{_b64encode(signature)}"
+
+
+def _verify_token_claims(token: str, *, expected_purpose: str) -> dict:
+    """JWT 서명·만료·사용자 ID·세션 ID를 검증한다."""
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired access token",
@@ -99,7 +136,24 @@ def verify_access_token(token: str) -> int:
         payload = json.loads(_b64decode(encoded_payload))
         if int(payload["exp"]) <= int(datetime.now(timezone.utc).timestamp()):
             raise ValueError("Expired token")
-        return int(payload["sub"])
+        user_id = int(payload["sub"])
+        session_id = payload["session_id"]
+
+        if payload.get("purpose") != expected_purpose:
+            raise ValueError("Token purpose is not allowed")
+
+        if (
+            not isinstance(session_id, str)
+            or not session_id
+            or len(session_id) > 36
+        ):
+            raise ValueError("Invalid token session")
+
+        return {
+            "user_id": user_id,
+            "session_id": session_id,
+            "purpose": expected_purpose,
+        }
     except (
         ValueError,
         TypeError,
@@ -112,7 +166,21 @@ def verify_access_token(token: str) -> int:
         raise credentials_error
 
 
+def _verify_access_token_claims(token: str) -> dict:
+    return _verify_token_claims(token, expected_purpose="access")
+
+
+def verify_verification_token(token: str) -> dict:
+    return _verify_token_claims(token, expected_purpose="verification")
+
+
+def verify_access_token(token: str) -> int:
+    """기존 인터페이스에 맞춰 검증된 사용자 ID를 반환한다."""
+    return _verify_access_token_claims(token)["user_id"]
+
+
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
@@ -122,14 +190,90 @@ def get_current_user(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = user_repository.find_by_id(db, verify_access_token(credentials.credentials))
+    claims = _verify_access_token_claims(credentials.credentials)
+    user = user_repository.find_by_id(db, claims["user_id"])
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user_session = (
+        db.query(UserSession)
+        .filter(
+            UserSession.session_id == claims["session_id"],
+            UserSession.user_id == user.id,
+        )
+        .populate_existing()
+        .first()
+    )
+
+    if user_session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid login session",
+        )
+
+    if (
+        not user_session.is_active
+        or user_session.logout_at is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="The login session has ended",
+        )
+
+    if user_session.auth_status != "AUTHENTICATED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The login session has not completed authentication",
+        )
+
+    request.state.auth_session_id = claims["session_id"]
+
     return user
+
+
+def determine_login_state(trust_status, pattern: dict) -> tuple[str, list[str]]:
+    """Map existing device and login signals to the public login contract."""
+    reasons: list[str] = []
+
+    if trust_status.value == "SHARED_DEVICE":
+        reasons.append("SHARED_DEVICE")
+    if pattern.get("account_switch_detected"):
+        reasons.append("ACCOUNT_SWITCH_DETECTED")
+
+    if reasons:
+        return "PENDING", reasons
+
+    if trust_status.value == "NEW_DEVICE":
+        return "REQUIRE_VERIFICATION", ["NEW_DEVICE"]
+
+    return "AUTHENTICATED", []
+
+
+def require_matching_token_session(
+    request: Request,
+    session_id: str,
+) -> None:
+    """요청의 세션 ID가 JWT의 세션 ID와 같은지 확인한다."""
+    token_session_id = getattr(
+        request.state,
+        "auth_session_id",
+        None,
+    )
+
+    if (
+        token_session_id is None
+        or token_session_id != str(session_id)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "Request session does not match "
+                "the access token"
+            ),
+        )
 
 
 def create_virtual_account(db: Session, user_id: int):
@@ -211,7 +355,6 @@ def login_user(
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = create_access_token(user.id)
     _save_login_history(db, user.id, device_id, ip_address, True)
 
     sync_login(
@@ -221,7 +364,6 @@ def login_user(
     )
 
     return {
-        "access_token": token,
         "token_type": "bearer",
         "user": {
             "id": user.id,

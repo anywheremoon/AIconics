@@ -1,20 +1,19 @@
-from app.ml.preprocessing.feature_extractor import WINDOW_DOWN_COUNT
 from app.services.ml_engine import detect_anomaly, extract_ml_features
 
 
 NORMAL_AGENT_EVENT = {
-    "typing_speed": 2.0,
-    "avg_hold_time": 100.0,
-    "avg_flight_time": 500.0,
-    "total_keystrokes": 60,
+    "typing_speed": 1.73,
+    "avg_hold_time": 83.44,
+    "avg_flight_time": 503.0,
+    "total_keystrokes": 10,
 }
 
 
-def test_ml_input_uses_training_keystroke_window():
+def test_ml_input_uses_measured_keystroke_count():
     features = extract_ml_features(NORMAL_AGENT_EVENT)
 
-    assert features == [2.0, 100.0, 500.0, float(WINDOW_DOWN_COUNT)]
-    assert NORMAL_AGENT_EVENT["total_keystrokes"] == 60
+    assert features == [1.73, 83.44, 503.0, 10.0]
+    assert NORMAL_AGENT_EVENT["total_keystrokes"] == 10
 
 
 def test_normal_agent_event_is_not_flagged_as_ml_anomaly():
