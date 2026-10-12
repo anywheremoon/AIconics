@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Header, Request, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -23,6 +26,10 @@ router = APIRouter(
     prefix="/api/auth",
     tags=["Authentication"],
 )
+
+
+class SessionLogoutRequest(BaseModel):
+    session_id: str
 
 
 class SessionLoginRequest(LoginRequest):
@@ -127,11 +134,24 @@ def login(
         )
 
         # 作成したセッションIDをJWTに含める
-        access_token = auth_service.create_access_token(
-            user_id,
-            user_session.session_id,
+        login_status, reason_codes = auth_service.determine_login_state(
+            trust_status, pattern
         )
+        user_session.auth_status = login_status
+        user_session.auth_reason_codes = reason_codes
 
+        access_token = None
+        verification_token = None
+        if login_status == "AUTHENTICATED":
+            access_token = auth_service.create_access_token(
+                user_id,
+                user_session.session_id,
+            )
+        else:
+            verification_token = auth_service.create_verification_token(
+                user_id,
+                user_session.session_id,
+            )
         db.commit()
 
     except Exception:
@@ -162,11 +182,7 @@ def read_current_user(
 ):
     return current_user
 
-
-@router.delete(
-    "/me",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_current_user(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -188,7 +204,7 @@ def logout(
     db: Session = Depends(get_db),
 ):
     try:
-        # JWT의 세션과 종료하려는 세션이 일치해야 한다.
+        # JWT의 세션 ID와 종료하려는 세션 ID가 일치하는지 확인한다.
         auth_service.require_matching_token_session(
             request,
             data.session_id,
