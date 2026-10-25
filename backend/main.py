@@ -23,6 +23,7 @@ from app.routes import (
     dashboard,
     events,
     graph,
+    integrity,
     risk_assessments,
     risk_score,
     security_guidance,
@@ -89,6 +90,9 @@ app.include_router(events.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
 app.include_router(security_guidance.router)
+
+# 관리자 블록체인 기록 조회
+app.include_router(integrity.router)
 
 
 # ================================
