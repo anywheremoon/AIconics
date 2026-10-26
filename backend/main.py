@@ -25,6 +25,7 @@ from app.routes import (
     graph,
     risk_assessments,
     risk_score,
+    security_guidance,
     transaction_risk,
     transactions,
     user_profiles,
@@ -78,6 +79,7 @@ def initialize_database():
 # Router 등록
 # ================================
 app.include_router(auth.router)
+app.include_router(security_guidance.router)
 app.include_router(user_profiles.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
