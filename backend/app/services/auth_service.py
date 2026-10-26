@@ -234,8 +234,22 @@ def get_current_user(
     return user
 
 
-def determine_login_state(trust_status, pattern: dict) -> tuple[str, list[str]]:
-    """Map existing device and login signals to the public login contract."""
+def determine_login_state(
+    trust_status,
+    pattern: dict,
+    *,
+    user_role: str = "USER",
+) -> tuple[str, list[str]]:
+    """Map device/login signals to the public login contract.
+
+    Administrators must remain able to reach the monitoring screens even when
+    a shared or new device would put an ordinary user's login on hold.  The
+    device and pattern signals are still collected and returned by the login
+    API; only the hold/verification decision is bypassed.
+    """
+    if user_role == "ADMIN":
+        return "AUTHENTICATED", []
+
     reasons: list[str] = []
 
     if trust_status.value == "SHARED_DEVICE":
