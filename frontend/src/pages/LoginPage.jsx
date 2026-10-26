@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   Navigate,
@@ -18,6 +19,7 @@ import AuthLoading from "../components/AuthLoading.jsx";
 
 function LoginPage() {
   const navigate = useNavigate();
+  const successMessage = location.state?.message;
 
   const {
     loading: authLoading,
@@ -152,6 +154,12 @@ function LoginPage() {
             접속 환경에 따라 추가 인증이 필요할 수 있습니다.
           </p>
         </div>
+
+        {successMessage && (
+          <p className="auth-success" role="status">
+            {successMessage}
+          </p>
+        )}
 
         <form
           className="auth-form"
