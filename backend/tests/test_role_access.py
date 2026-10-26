@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.repositories import user_repository
 from app.services import auth_service, device_trust_service
+from app.services import auth_service, device_trust_service
 from app.services.auth_service import hash_password
 from app.models.device_model import Device
 from app.models.event_model import Event
@@ -148,6 +149,7 @@ def test_register_then_login_round_trip(client, db):
     assert registered_user is not None
     assert registered_user.role == "USER"
 
+    login_response = login(client, "new_user", device_id="test-device")
     login_response = login(client, "new_user", device_id="test-device")
 
     assert login_response.status_code == 200
