@@ -1,3 +1,4 @@
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -37,6 +38,10 @@ def db():
     finally:
         session.close()
 
+@pytest.fixture(autouse=True)
+def verification_test_environment(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("VERIFICATION_EXPOSE_CODE", "true")
 
 @pytest.fixture
 def client():
@@ -66,10 +71,53 @@ def create_user(db, username: str, password: str = "password1234", role: str = "
 
 
 def login(client: TestClient, username: str, password: str = "password1234"):
-    return client.post(
+    response = client.post(
         "/api/auth/login",
-        json={"username": username, "password": password},
+        json={
+            "username": username,
+            "password": password,
+            "device_id": "role-access-test-device",
+            "location": "Seoul",
+        },
     )
+
+    if response.status_code != 200:
+        return response
+
+    result = response.json()
+
+    if result["login_status"] == "AUTHENTICATED":
+        return response
+
+    if result["login_status"] != "REQUIRE_VERIFICATION":
+        return response
+
+    headers = {
+        "Authorization": f"Bearer {result['verification_token']}"
+    }
+    session_id = result["session_id"]
+
+    issue_response = client.post(
+        "/api/auth/verification/request",
+        json={"session_id": session_id},
+        headers=headers,
+    )
+    assert issue_response.status_code == 200, issue_response.text
+
+    code = issue_response.json()["verification_code"]
+    assert code is not None
+
+    confirm_response = client.post(
+        "/api/auth/verification/confirm",
+        json={
+            "session_id": session_id,
+            "code": code,
+        },
+        headers=headers,
+    )
+    assert confirm_response.status_code == 200, confirm_response.text
+
+    return confirm_response
 
 
 def test_new_user_role_is_user(db):
