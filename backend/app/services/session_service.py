@@ -16,6 +16,8 @@ def create_login_session(
     device_id: str,
     ip_address: str | None,
     location: str | None,
+    auth_status: str = "AUTHENTICATED",
+    auth_reason_codes: list[str] | None = None,
 ):
     trust_status = device_trust_service.assess_device(
         db, user_id, device_id
@@ -37,6 +39,8 @@ def create_login_session(
             "device_id": device_id,
             "ip_address": ip_address,
             "location": location,
+            "auth_status": auth_status,
+            "auth_reason_codes": auth_reason_codes or [],
             "device_trust_status": trust_status.value,
             "repeated_login_detected": (
                 pattern["repeated_login_detected"]
@@ -105,6 +109,12 @@ def validate_active_session(
             detail="The login session has ended",
         )
 
+    if user_session.auth_status != "AUTHENTICATED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The login session has not completed authentication",
+        )
+
     return user_session
 
 
@@ -153,5 +163,4 @@ def validate_event_session(
             status_code=status.HTTP_409_CONFLICT,
             detail="Event device does not match the login session device",
         )
-
     return user_session

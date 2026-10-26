@@ -31,7 +31,6 @@ from app.routes import (
     user_profiles,
 )
 
-
 # ================================
 # FastAPI 애플리케이션 생성
 # ================================
@@ -89,6 +88,7 @@ app.include_router(transaction_risk.router)
 app.include_router(events.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
+app.include_router(security_guidance.router)
 
 
 # ================================

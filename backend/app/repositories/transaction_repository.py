@@ -5,13 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.models.transaction_model import Transaction
 
-ALLOWED_TRANSACTION_STATUSES = {
-    "COMPLETED",
-    "PENDING_VERIFICATION",
-    "PENDING_REVIEW",
-    "ACCOUNT_REVIEW",
-}
-
 
 ALLOWED_TRANSACTION_STATUSES = frozenset(
     {
