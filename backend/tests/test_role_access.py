@@ -7,7 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.repositories import user_repository
-from app.services import auth_service
+from app.services import auth_service, device_trust_service
 from app.services.auth_service import hash_password
 from app.models.device_model import Device
 from app.models.event_model import Event
@@ -72,13 +72,18 @@ def create_user(db, username: str, password: str = "password1234", role: str = "
     return user
 
 
-def login(client: TestClient, username: str, password: str = "password1234"):
-    login_response = client.post(
+def login(
+    client: TestClient,
+    username: str,
+    password: str = "password1234",
+    device_id: str | None = None,
+):
+    response = client.post(
         "/api/auth/login",
         json={
             "username": username,
             "password": password,
-            "device_id": f"role-test-device-{username}",
+            "device_id": device_id or f"{username}-device",
         },
     )
 
@@ -321,4 +326,4 @@ def test_admin_can_get_event_detail(client, db):
         "score_type": "IDENTITY",
         "score_contribution": 25,
         }
-    ]  
+    ]

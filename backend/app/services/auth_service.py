@@ -247,7 +247,13 @@ def determine_login_state(
     device and pattern signals are still collected and returned by the login
     API; only the hold/verification decision is bypassed.
     """
-    if user_role == "ADMIN":
+    normalized_role = (
+        user_role.strip().upper()
+        if isinstance(user_role, str)
+        else ""
+    )
+
+    if normalized_role == "ADMIN":
         return "AUTHENTICATED", []
 
     reasons: list[str] = []
