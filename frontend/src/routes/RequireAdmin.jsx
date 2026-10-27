@@ -1,38 +1,24 @@
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext.jsx";
-import AuthLoading from "../components/AuthLoading.jsx";
+import RequireAuth from "./RequireAuth.jsx";
+
 
 function RequireAdmin({ children }) {
-  const {
-    loading,
-    token,
-    user,
-  } = useAuth();
+  const { user } = useAuth();
 
-  if (loading) {
-    return <AuthLoading />;
-  }
-
-  if (!token || !user) {
-    return (
-      <Navigate
-        to="/login"
-        replace
-      />
-    );
-  }
-
-  if (user.role !== "ADMIN") {
-    return (
-      <Navigate
-        to="/forbidden"
-        replace
-      />
-    );
-  }
-
-  return children;
+  return (
+    <RequireAuth>
+      {user?.role === "ADMIN" ? (
+        children
+      ) : (
+        <Navigate
+          to="/forbidden"
+          replace
+        />
+      )}
+    </RequireAuth>
+  );
 }
 
 export default RequireAdmin;

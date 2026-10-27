@@ -19,9 +19,17 @@ def create_login_session(
     auth_status: str = "AUTHENTICATED",
     auth_reason_codes: list[str] | None = None,
 ):
-    trust_status = device_trust_service.assess_device(db, user_id, device_id)
-    pattern = login_pattern_service.analyze_login_pattern(db, user_id, device_id)
-    device_trust_service.record_device_use(db, user_id, device_id)
+    trust_status = device_trust_service.assess_device(
+        db, user_id, device_id
+    )
+
+    pattern = login_pattern_service.analyze_login_pattern(
+        db, user_id, device_id
+    )
+
+    device_trust_service.record_device_use(
+        db, user_id, device_id
+    )
 
     user_session = user_session_repository.create_session(
         db,
@@ -34,14 +42,19 @@ def create_login_session(
             "auth_status": auth_status,
             "auth_reason_codes": auth_reason_codes or [],
             "device_trust_status": trust_status.value,
-            "repeated_login_detected": pattern["repeated_login_detected"],
-            "account_switch_detected": pattern["account_switch_detected"],
+            "repeated_login_detected": (
+                pattern["repeated_login_detected"]
+            ),
+            "account_switch_detected": (
+                pattern["account_switch_detected"]
+            ),
             "recent_login_count": pattern["recent_login_count"],
-            "recent_device_account_count": pattern[
-                "recent_device_account_count"
-            ],
+            "recent_device_account_count": (
+                pattern["recent_device_account_count"]
+            ),
         },
     )
+
     return user_session, trust_status, pattern
 
 

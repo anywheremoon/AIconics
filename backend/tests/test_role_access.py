@@ -1,5 +1,5 @@
+import os
 import pytest
-import main
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -24,13 +24,9 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 
 @pytest.fixture(autouse=True)
-def reset_database(monkeypatch):
+def reset_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    monkeypatch.setattr(main, "engine", engine)
-    monkeypatch.setattr(auth_service, "PASSWORD_ITERATIONS", 1_000)
-    monkeypatch.setattr(auth_service, "sync_login", lambda *args: None)
-    monkeypatch.setenv("EXPOSE_VERIFICATION_CODE", "true")
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -43,6 +39,10 @@ def db():
     finally:
         session.close()
 
+@pytest.fixture(autouse=True)
+def verification_test_environment(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("VERIFICATION_EXPOSE_CODE", "true")
 
 @pytest.fixture
 def client():
@@ -78,7 +78,7 @@ def login(
     password: str = "password1234",
     device_id: str | None = None,
 ):
-    login_response = client.post(
+    response = client.post(
         "/api/auth/login",
         json={
             "username": username,
@@ -86,24 +86,44 @@ def login(
             "device_id": device_id or f"{username}-device",
         },
     )
-    body = login_response.json()
-    if body.get("login_status") != "REQUIRE_VERIFICATION":
-        return login_response
+
+    if response.status_code != 200:
+        return response
+
+    result = response.json()
+
+    if result["login_status"] == "AUTHENTICATED":
+        return response
+
+    if result["login_status"] != "REQUIRE_VERIFICATION":
+        return response
 
     headers = {
-        "Authorization": f"Bearer {body['verification_token']}"
+        "Authorization": f"Bearer {result['verification_token']}"
     }
+    session_id = result["session_id"]
+
     issue_response = client.post(
         "/api/auth/verification/request",
-        json={"session_id": body["session_id"]},
+        json={"session_id": session_id},
         headers=headers,
     )
+    assert issue_response.status_code == 200, issue_response.text
+
     code = issue_response.json()["verification_code"]
-    return client.post(
+    assert code is not None
+
+    confirm_response = client.post(
         "/api/auth/verification/confirm",
-        json={"session_id": body["session_id"], "code": code},
+        json={
+            "session_id": session_id,
+            "code": code,
+        },
         headers=headers,
     )
+    assert confirm_response.status_code == 200, confirm_response.text
+
+    return confirm_response
 
 
 def test_new_user_role_is_user(db):

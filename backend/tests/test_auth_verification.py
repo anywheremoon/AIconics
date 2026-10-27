@@ -33,7 +33,8 @@ def reset_database(monkeypatch):
     monkeypatch.setattr(main, "engine", engine)
     monkeypatch.setattr(auth_service, "sync_login", lambda *args: None)
     monkeypatch.setattr(auth_service, "PASSWORD_ITERATIONS", 1_000)
-    monkeypatch.setenv("EXPOSE_VERIFICATION_CODE", "true")
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("VERIFICATION_EXPOSE_CODE", "true")
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -187,8 +188,8 @@ def test_too_many_invalid_codes_moves_session_to_pending(client, db):
 
     session = db.get(UserSession, login_body["session_id"])
     db.refresh(session)
-    assert session.auth_status == "PENDING"
-    assert "TOO_MANY_VERIFICATION_ATTEMPTS" in session.auth_reason_codes
+    assert session.auth_status == "PENDING_REVIEW"
+    assert "VERIFICATION_ATTEMPTS_EXCEEDED" in session.auth_reason_codes
 
     response = client.post(
         "/api/auth/verification/confirm",
@@ -198,10 +199,10 @@ def test_too_many_invalid_codes_moves_session_to_pending(client, db):
         },
         headers=headers,
     )
-    assert response.status_code == 409
+    assert response.status_code == 403
 
 
-def test_shared_device_login_is_pending(client, db):
+def test_shared_device_login_requires_verification(client, db):
     owner = create_user(db, "device-owner")
     user = create_user(db, "pending-user")
     device_repository.touch_device_and_link(db, "shared-device", owner.id)
@@ -210,8 +211,8 @@ def test_shared_device_login_is_pending(client, db):
     response = login(client, user.username, "shared-device")
     assert response.status_code == 200
     body = response.json()
-    assert body["login_status"] == "PENDING"
-    assert body["requires_verification"] is False
+    assert body["login_status"] == "REQUIRE_VERIFICATION"
+    assert body["requires_verification"] is True
     assert "SHARED_DEVICE" in body["reason_codes"]
     assert body["access_token"] is None
     assert body["verification_token"]
@@ -223,7 +224,27 @@ def test_shared_device_login_is_pending(client, db):
             "Authorization": f"Bearer {body['verification_token']}"
         },
     )
-    assert verification_request.status_code == 409
+    assert verification_request.status_code == 200
+
+
+def test_recent_account_switch_on_shared_device_is_pending(client, db):
+    owner = create_user(db, "switch-owner")
+    user = create_user(db, "switch-user")
+
+    owner_response = login(client, owner.username, "switch-device")
+    assert owner_response.status_code == 200
+
+    response = login(client, user.username, "switch-device")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["login_status"] == "PENDING_REVIEW"
+    assert body["requires_verification"] is False
+    assert body["reason_codes"] == [
+        "SHARED_DEVICE",
+        "ACCOUNT_SWITCH_DETECTED",
+    ]
+    assert body["access_token"] is None
+    assert body["verification_token"]
 
 
 def test_verification_token_is_bound_to_its_session(client, db):
@@ -240,7 +261,7 @@ def test_verification_token_is_bound_to_its_session(client, db):
         },
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 def test_access_token_cannot_call_verification_api(client, db):
@@ -309,7 +330,7 @@ def test_expired_code_is_rejected(client, db):
         headers=headers,
     )
 
-    assert response.status_code == 410
+    assert response.status_code == 400
 
 
 def test_pending_session_cannot_use_forged_access_token(client, db):

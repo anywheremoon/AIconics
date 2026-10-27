@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,6 +21,7 @@ from app.models.user_model import User
 from app.models.user_session_model import UserSession
 from app.services.auth_service import get_current_user
 from app.services.transaction_risk_engine import calculate_transaction_risk
+from app.services import account_service
 from main import app
 
 
@@ -33,6 +35,15 @@ TestingSessionLocal = sessionmaker(
     autoflush=False,
     bind=engine,
 )
+
+
+def authenticate_as(user_id: int, session_id: str | None = None):
+    def override_get_current_user(request: Request):
+        if session_id is not None:
+            request.state.auth_session_id = session_id
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
 
 
 @pytest.fixture(autouse=True)
@@ -324,7 +335,7 @@ def test_transaction_risk_api_returns_authenticated_users_score(client):
     user_id = user.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id)
 
     response = client.post(
         "/api/risks/transaction",
@@ -348,7 +359,7 @@ def test_transaction_risk_api_rejects_another_users_session(client):
     user_id = user.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id)
 
     response = client.post(
         "/api/risks/transaction",
@@ -376,7 +387,7 @@ def test_transfer_executes_with_server_calculated_low_risk(client, monkeypatch):
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {
@@ -459,7 +470,7 @@ def test_transfer_persists_risk_and_does_not_move_money_when_verification_requir
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {"graph_score": 0, "reason_details": []},
@@ -521,7 +532,7 @@ def test_transfer_does_not_move_money_when_final_risk_is_high(client, monkeypatc
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, session_id)
     monkeypatch.setattr(
         "app.services.graph_risk_engine.analyze_graph_risk",
         lambda _user_id: {"graph_score": 0, "reason_details": []},
@@ -584,7 +595,7 @@ def test_transfer_rejects_historical_session_behavior_event(client):
     recipient_id = recipient.id
     recipient_number = recipient.account_number
     db.close()
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=user_id)
+    authenticate_as(user_id, old_session_id)
 
     response = client.post(
         "/api/transactions/transfer",
@@ -603,4 +614,154 @@ def test_transfer_rejects_historical_session_behavior_event(client):
     assert db.query(Transaction).filter(
         Transaction.request_id == "00000000-0000-4000-8000-000000000303"
     ).count() == 0
+    db.close()
+
+def test_transfer_rejects_when_behavior_event_is_missing(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+
+    user, sender, recipient, session_id = create_risk_context(db, now)
+
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+
+    db.close()
+
+    authenticate_as(user_id, session_id)
+
+    request_id = "00000000-0000-4000-8000-000000000305"
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": request_id,
+            "session_id": session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "No behavior event is available for transaction risk assessment"
+    )
+
+    db = TestingSessionLocal()
+
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+
+    assert (
+        db.query(Transaction)
+        .filter(Transaction.request_id == request_id)
+        .count()
+        == 0
+    )
+
+    db.close()
+
+def test_transfer_rejects_inactive_sender_account(client):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+
+    user, sender, recipient, session_id = create_risk_context(db, now)
+    add_behavior_event(db, user.id, session_id)
+
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+
+    sender.status = "INACTIVE"
+    db.commit()
+    db.close()
+
+    authenticate_as(user_id, session_id)
+
+    request_id = "00000000-0000-4000-8000-000000000306"
+
+    response = client.post(
+        "/api/transactions/transfer",
+        json={
+            "request_id": request_id,
+            "session_id": session_id,
+            "recipient_account_number": recipient_number,
+            "amount": "1000.00",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Account is not active"
+
+    db = TestingSessionLocal()
+
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+
+    assert (
+        db.query(Transaction)
+        .filter(Transaction.request_id == request_id)
+        .count()
+        == 0
+    )
+
+    db.close()
+
+def test_transfer_rolls_back_when_risk_assessment_save_fails(
+    client,
+    monkeypatch,
+):
+    now = datetime.now(timezone.utc)
+    db = TestingSessionLocal()
+
+    user, sender, recipient, session_id = create_risk_context(db, now)
+    add_behavior_event(db, user.id, session_id)
+
+    user_id = user.id
+    sender_id = sender.id
+    recipient_id = recipient.id
+    recipient_number = recipient.account_number
+
+    db.close()
+
+    authenticate_as(user_id, session_id)
+
+    def fail_risk_assessment(*args, **kwargs):
+        raise RuntimeError("forced risk assessment failure")
+
+    monkeypatch.setattr(
+        account_service,
+        "create_risk_assessment",
+        fail_risk_assessment,
+    )
+
+    request_id = "00000000-0000-4000-8000-000000000307"
+
+    with pytest.raises(
+        RuntimeError,
+        match="forced risk assessment failure",
+    ):
+        client.post(
+            "/api/transactions/transfer",
+            json={
+                "request_id": request_id,
+                "session_id": session_id,
+                "recipient_account_number": recipient_number,
+                "amount": "1000.00",
+            },
+        )
+
+    db = TestingSessionLocal()
+
+    assert (
+        db.query(Transaction)
+        .filter(Transaction.request_id == request_id)
+        .count()
+        == 0
+    )
+    assert db.get(Account, sender_id).balance == Decimal("50000000.00")
+    assert db.get(Account, recipient_id).balance == Decimal("100000.00")
+
     db.close()

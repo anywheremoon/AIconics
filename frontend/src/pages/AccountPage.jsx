@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { getMyAccount } from "../api/accountApi.js";
+import { deleteMyAccount, getMyAccount } from "../api/accountApi.js";
 import { getTransactions } from "../api/transactionApi.js";
 import AccountCard from "../components/AccountCard.jsx";
 import TransactionHistoryTable from "../components/TransactionHistoryTable.jsx";
@@ -12,6 +12,26 @@ function AccountPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const handleDeleteAccount = async () => {
+  const confirmed = window.confirm(
+    "정말 회원 탈퇴하시겠습니까? 탈퇴 후에는 되돌릴 수 없습니다."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await deleteMyAccount();
+    localStorage.removeItem("access_token");
+
+    alert("회원 탈퇴가 완료되었습니다.");
+    navigate("/login");
+  } catch (err) {
+    alert(err.message || "회원 탈퇴에 실패했습니다.");
+  }
+};
 
   const loadAccount = useCallback(async () => {
     setLoading(true);
@@ -86,6 +106,13 @@ function AccountPage() {
               disabled={account.status !== "ACTIVE"}
             >
               출금
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleDeleteAccount}
+            >
+              회원 탈퇴
             </button>
           </div>
 

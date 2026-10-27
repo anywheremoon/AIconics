@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import RiskCard from "../components/RiskCard";
 import RiskLineChart from "../components/RiskLineChart";
+import IntegrityCheckPanel from "../components/IntegrityCheckPanel.jsx";
 
 import {
   getEventLogs,
@@ -1161,6 +1162,9 @@ function DashboardPage() {
           data={riskHistory}
           loading={loading}
         />
+
+        {/* 분석 결과 블록체인 기록 조회 */}
+        <IntegrityCheckPanel />
 
       </div>
 

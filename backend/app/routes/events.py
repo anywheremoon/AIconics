@@ -4,12 +4,25 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies.auth_dependency import require_admin
 from app.models.event_model import Event
-from app.schemas.event_schema import EventCreate, EventDetectionResponse
-from app.services import session_service, user_profile_service
-from app.services.auth_service import get_current_user
-from app.services.profile_comparison_service import compare_with_profile
+from app.schemas.event_schema import (
+    EventCreate,
+    EventDetectionResponse,
+)
+from app.services import (
+    session_service,
+    user_profile_service,
+)
+from app.services.auth_service import (
+    get_current_user,
+    require_matching_token_session,
+)
+from app.services.profile_comparison_service import (
+    compare_with_profile,
+)
 from app.services.risk_engine import calculate_risk_score
-from app.services.risk_gate_service import lock_user_for_risk_transition
+from app.services.risk_gate_service import (
+    lock_user_for_risk_transition,
+)
 
 
 router = APIRouter(
@@ -28,8 +41,19 @@ def create_event(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    # 요청의 세션 ID와 JWT의 세션 ID를 비교한다.
+    require_matching_token_session(
+        request,
+        event_data.session_id,
+    )
+
     user_id = current_user.id
-    ip_address = request.client.host if request.client is not None else "unknown"
+
+    ip_address = (
+        request.client.host
+        if request.client is not None
+        else "unknown"
+    )
 
     user_session = session_service.validate_event_session(
         db,
@@ -38,11 +62,23 @@ def create_event(
         event_data.device_id,
     )
 
-    # Transactions take the same row lock from risk scoring through commit.
-    lock_user_for_risk_transition(db, user_id)
+    # 위험도 계산부터 저장까지 사용자 잠금을 유지한다.
+    lock_user_for_risk_transition(
+        db,
+        user_id,
+    )
 
-    profile = user_profile_service.get_my_profile(db, user_id)
-    baseline_status = user_profile_service.get_baseline_status(db, user_id)
+    profile = user_profile_service.get_my_profile(
+        db,
+        user_id,
+    )
+
+    baseline_status = (
+        user_profile_service.get_baseline_status(
+            db,
+            user_id,
+        )
+    )
 
     comparison = compare_with_profile(
         profile,
@@ -54,8 +90,12 @@ def create_event(
         event_data,
         comparison,
         device_trust_status=user_session.device_trust_status,
-        repeated_login_detected=user_session.repeated_login_detected,
-        account_switch_detected=user_session.account_switch_detected,
+        repeated_login_detected=(
+            user_session.repeated_login_detected
+        ),
+        account_switch_detected=(
+            user_session.account_switch_detected
+        ),
         baseline_status=baseline_status,
     )
 
@@ -71,8 +111,12 @@ def create_event(
         total_keystrokes=event_data.total_keystrokes,
         mouse_move_count=event_data.mouse_move_count,
         click_count=event_data.click_count,
-        is_new_device=user_session.device_trust_status == "NEW_DEVICE",
-        profile_deviation_score=risk_result["profile_deviation_score"],
+        is_new_device=(
+            user_session.device_trust_status == "NEW_DEVICE"
+        ),
+        profile_deviation_score=(
+            risk_result["profile_deviation_score"]
+        ),
         detect_anomaly=risk_result["is_anomaly"],
         behavior_score=risk_result["behavior_score"],
         identity_score=risk_result["identity_score"],
@@ -102,7 +146,9 @@ def create_event(
         baseline_status=db_event.baseline_status,
         reasons=db_event.reasons,
         is_anomaly=db_event.detect_anomaly,
-        profile_deviation_score=db_event.profile_deviation_score,
+        profile_deviation_score=(
+            db_event.profile_deviation_score
+        ),
     )
 
 
@@ -112,6 +158,7 @@ def get_events(
     current_admin=Depends(require_admin),
 ):
     return db.query(Event).all()
+
 
 @router.get("/events/{event_id}")
 def get_event_detail(
@@ -133,12 +180,17 @@ def get_event_detail(
 
     return event
 
+
 @router.get("/suspicious-users")
 def get_suspicious_users(
     db: Session = Depends(get_db),
     current_admin=Depends(require_admin),
 ):
-    return db.query(Event).filter(Event.risk_score >= 40).all()
+    return (
+        db.query(Event)
+        .filter(Event.risk_score >= 40)
+        .all()
+    )
 
 
 @router.delete("/events/{event_id}")
@@ -147,12 +199,16 @@ def delete_event(
     db: Session = Depends(get_db),
     current_admin=Depends(require_admin),
 ):
-    event = db.query(Event).filter(Event.id == event_id).first()
+    event = (
+        db.query(Event)
+        .filter(Event.id == event_id)
+        .first()
+    )
 
     if event is None:
         raise HTTPException(
             status_code=404,
-            detail="해당 행동 로그를 찾을 수 없습니다.",
+            detail="해당 행동 로그가 삭제되었거나 존재하지 않습니다.",
         )
 
     db.delete(event)

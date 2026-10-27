@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import {
   NavLink,
   useNavigate,
@@ -6,20 +8,40 @@ import {
 import { useAuth } from "../auth/AuthContext.jsx";
 
 function AppNavigation() {
-  const {
-    user,
-    logout,
-  } = useAuth();
+  const { user, logout } = useAuth();
 
   const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (!user) {
     return null;
   }
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+
+    try {
+      // 서버 세션 종료와 인증정보 제거가 끝날 때까지 기다린다.
+      const { agentCleared } = await logout();
+
+      if (!agentCleared) {
+        window.alert(
+          "서버 로그아웃은 완료됐지만 Agent 인증정보 제거에 실패했습니다. " +
+          "Agent를 종료해 주세요."
+        );
+      }
+
+      navigate("/login", { replace: true });
+    } catch (error) {
+      window.alert(
+        "서버 로그아웃을 완료하지 못했습니다. " +
+        (error.message || "잠시 후 다시 시도해 주세요.")
+      );
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   const getNavLinkClass = ({ isActive }) => {
@@ -31,7 +53,6 @@ function AppNavigation() {
   return (
     <header className="app-header">
       <div className="app-header-inner">
-
         {/* 왼쪽 로고 */}
         <NavLink
           to={
@@ -46,7 +67,6 @@ function AppNavigation() {
 
         {/* 오른쪽 메뉴 */}
         <nav className="app-navigation">
-
           <NavLink
             to="/account"
             className={getNavLinkClass}
@@ -83,10 +103,10 @@ function AppNavigation() {
             type="button"
             className="logout-button"
             onClick={handleLogout}
+            disabled={loggingOut}
           >
-            로그아웃
+            {loggingOut ? "로그아웃 중..." : "로그아웃"}
           </button>
-
         </nav>
       </div>
     </header>

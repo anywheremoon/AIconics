@@ -23,13 +23,14 @@ from app.routes import (
     dashboard,
     events,
     graph,
+    integrity,
     risk_assessments,
     risk_score,
+    security_guidance,
     transaction_risk,
     transactions,
     user_profiles,
 )
-
 
 # ================================
 # FastAPI 애플리케이션 생성
@@ -78,6 +79,7 @@ def initialize_database():
 # Router 등록
 # ================================
 app.include_router(auth.router)
+app.include_router(security_guidance.router)
 app.include_router(user_profiles.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
@@ -87,6 +89,10 @@ app.include_router(transaction_risk.router)
 app.include_router(events.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
+app.include_router(security_guidance.router)
+
+# 관리자 블록체인 기록 조회
+app.include_router(integrity.router)
 
 
 # ================================

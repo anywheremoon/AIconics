@@ -33,3 +33,33 @@ export async function getMyAccount() {
 
   return data;
 }
+
+export async function deleteMyAccount() {
+  const token = localStorage.getItem("access_token");
+
+  if (!token) {
+    throw new Error("로그인이 필요합니다.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/auth/me`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (response.status === 401) {
+    localStorage.removeItem("access_token");
+    throw new Error("로그인이 만료되었습니다.");
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(
+      data?.detail || "회원 탈퇴에 실패했습니다."
+    );
+  }
+}

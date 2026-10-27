@@ -1,65 +1,76 @@
 import hashlib
 import hmac
+import math
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user_session_model import UserSession
 from app.services import auth_service
 
 
-VERIFICATION_CODE_TTL_SECONDS = int(
-    os.getenv("VERIFICATION_CODE_TTL_SECONDS", "300")
-)
-VERIFICATION_REQUEST_COOLDOWN_SECONDS = int(
-    os.getenv("VERIFICATION_REQUEST_COOLDOWN_SECONDS", "30")
-)
-VERIFICATION_MAX_ATTEMPTS = int(
-    os.getenv("VERIFICATION_MAX_ATTEMPTS", "5")
-)
+VERIFICATION_CODE_EXPIRE_SECONDS = 300
+VERIFICATION_REQUEST_COOLDOWN_SECONDS = 60
+VERIFICATION_MAX_ATTEMPTS = 5
 
 
 def expose_code_in_response() -> bool:
-    """Expose a code only when a local/test environment explicitly opts in."""
-    return os.getenv("EXPOSE_VERIFICATION_CODE", "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    """개발 환경에서만 인증번호를 응답에 포함한다."""
+    return (
+        os.getenv("APP_ENV", "").lower() in {"development", "local", "test"}
+        and os.getenv("VERIFICATION_EXPOSE_CODE", "").lower() == "true"
+    )
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
+def _utc(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
-def _normalize_db_datetime(value: datetime) -> datetime:
-    # SQLite test databases can return naive datetimes even for timezone=True.
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-def _code_hash(session_id: str, code: str) -> str:
+def _hash_code(session_id: str, code: str) -> str:
+    """서버 비밀키와 세션 ID를 사용해 인증번호를 해시한다."""
     return hmac.new(
-        auth_service.JWT_SECRET.encode(),
-        f"{session_id}:{code}".encode(),
+        auth_service.JWT_SECRET.encode("utf-8"),
+        f"verification:{session_id}:{code}".encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+
+
+def _require_verification(user_session):
+    if (
+        not user_session.is_active
+        or user_session.logout_at is not None
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="The login session has ended",
+        )
+
+    if user_session.auth_status != "REQUIRE_VERIFICATION":
+        raise HTTPException(
+            status_code=403,
+            detail="This session is not awaiting verification",
+        )
 
 
 def get_limited_session(
     db: Session,
     token: str,
     session_id: str,
-    *,
-    allow_pending: bool = False,
-) -> UserSession:
+):
+    """제한 토큰 소유자와 요청 세션을 검증하고 행 잠금을 획득한다."""
     claims = auth_service.verify_verification_token(token)
+
     if claims["session_id"] != session_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Verification token does not match the session",
+            status_code=403,
+            detail="Verification token session mismatch",
         )
 
     user_session = (
@@ -69,112 +80,170 @@ def get_limited_session(
             UserSession.user_id == claims["user_id"],
         )
         .populate_existing()
+        .with_for_update()
         .first()
     )
+
+    if user_session is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid login session",
+        )
+
     if (
-        user_session is None
-        or not user_session.is_active
+        not user_session.is_active
         or user_session.logout_at is not None
     ):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or ended login session",
+            status_code=401,
+            detail="The login session has ended",
         )
 
-    allowed = {"REQUIRE_VERIFICATION"}
-    if allow_pending:
-        allowed.add("PENDING")
-    if user_session.auth_status not in allowed:
+    # 보류 세션은 안내 조회용으로만 사용할 수 있다.
+    # 번호 발급·확인에서는 _require_verification()으로 거부한다.
+    if user_session.auth_status not in {
+        "REQUIRE_VERIFICATION",
+        "PENDING_REVIEW",
+    }:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="The session is not awaiting verification",
+            status_code=403,
+            detail="Verification token is no longer usable",
         )
+
     return user_session
 
 
-def issue_code(db: Session, user_session: UserSession) -> tuple[str, int]:
-    now = _now()
-    if user_session.verification_requested_at is not None:
-        requested_at = _normalize_db_datetime(
-            user_session.verification_requested_at
+def issue_code(db: Session, user_session):
+    """6자리 인증번호를 발급한다. commit은 라우트에서 수행한다."""
+    _require_verification(user_session)
+
+    attempts = user_session.verification_attempts or 0
+    if attempts >= VERIFICATION_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=403,
+            detail="Verification attempt limit exceeded",
         )
-        retry_at = requested_at + timedelta(
-            seconds=VERIFICATION_REQUEST_COOLDOWN_SECONDS
-        )
-        if retry_at > now:
-            retry_after = max(1, int((retry_at - now).total_seconds()))
+
+    now = datetime.now(timezone.utc)
+    requested_at = _utc(user_session.verification_requested_at)
+
+    if requested_at is not None:
+        remaining = (
+            requested_at
+            + timedelta(seconds=VERIFICATION_REQUEST_COOLDOWN_SECONDS)
+            - now
+        ).total_seconds()
+
+        if remaining > 0:
             raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={
-                    "message": "Please wait before requesting another code",
-                    "retry_after_seconds": retry_after,
-                },
-                headers={"Retry-After": str(retry_after)},
+                status_code=429,
+                detail="Please wait before requesting another code",
+                headers={"Retry-After": str(math.ceil(remaining))},
             )
 
+    # 실제 발송 기능이 없는 상태에서 발급 성공으로 응답하지 않는다.
+    if not expose_code_in_response():
+        raise HTTPException(
+            status_code=503,
+            detail="Verification delivery is not configured",
+        )
+
     code = f"{secrets.randbelow(1_000_000):06d}"
-    user_session.verification_code_hash = _code_hash(
-        user_session.session_id, code
+
+    user_session.verification_code_hash = _hash_code(
+        user_session.session_id,
+        code,
     )
     user_session.verification_requested_at = now
     user_session.verification_expires_at = now + timedelta(
-        seconds=VERIFICATION_CODE_TTL_SECONDS
+        seconds=VERIFICATION_CODE_EXPIRE_SECONDS
     )
-    user_session.verification_attempts = 0
+
+    # 재발급해도 누적 실패 횟수는 초기화하지 않는다.
     db.flush()
-    return code, VERIFICATION_CODE_TTL_SECONDS
+
+    return code, VERIFICATION_CODE_EXPIRE_SECONDS
 
 
-def confirm_code(
-    db: Session, user_session: UserSession, code: str
-) -> str:
-    now = _now()
+def confirm_code(db: Session, user_session, code: str) -> str:
+    """번호를 확인하고 같은 세션을 최종 인증 상태로 전환한다."""
+    _require_verification(user_session)
+
+    attempts = user_session.verification_attempts or 0
+    if attempts >= VERIFICATION_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=403,
+            detail="Verification attempt limit exceeded",
+        )
+
     if (
-        user_session.verification_code_hash is None
+        not user_session.verification_code_hash
         or user_session.verification_expires_at is None
     ):
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=400,
             detail="Request a verification code first",
         )
 
-    expires_at = _normalize_db_datetime(user_session.verification_expires_at)
-    if expires_at <= now:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail="The verification code has expired",
-        )
+    now = datetime.now(timezone.utc)
+    expires_at = _utc(user_session.verification_expires_at)
 
-    if user_session.verification_attempts >= VERIFICATION_MAX_ATTEMPTS:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many verification attempts",
-        )
-
-    if not hmac.compare_digest(
-        user_session.verification_code_hash,
-        _code_hash(user_session.session_id, code),
-    ):
-        user_session.verification_attempts += 1
-        if user_session.verification_attempts >= VERIFICATION_MAX_ATTEMPTS:
-            user_session.auth_status = "PENDING"
-            reasons = list(user_session.auth_reason_codes or [])
-            if "TOO_MANY_VERIFICATION_ATTEMPTS" not in reasons:
-                reasons.append("TOO_MANY_VERIFICATION_ATTEMPTS")
-            user_session.auth_reason_codes = reasons
+    if now >= expires_at:
+        user_session.verification_code_hash = None
+        user_session.verification_expires_at = None
         db.flush()
+
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification code",
+            status_code=400,
+            detail="Verification code has expired",
+        )
+
+    valid_format = (
+        isinstance(code, str)
+        and len(code) == 6
+        and all(char in "0123456789" for char in code)
+    )
+
+    matches = valid_format and hmac.compare_digest(
+        user_session.verification_code_hash,
+        _hash_code(user_session.session_id, code),
+    )
+
+    if not matches:
+        user_session.verification_attempts = attempts + 1
+
+        if user_session.verification_attempts >= VERIFICATION_MAX_ATTEMPTS:
+            user_session.auth_status = "PENDING_REVIEW"
+            user_session.auth_reason_codes = list(
+                dict.fromkeys(
+                    list(user_session.auth_reason_codes or [])
+                    + ["VERIFICATION_ATTEMPTS_EXCEEDED"]
+                )
+            )
+            user_session.verification_code_hash = None
+            user_session.verification_expires_at = None
+
+        db.flush()
+
+        # 현재 auth.py는 400일 때 실패 횟수와 보류 상태를 commit한다.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Verification attempt limit exceeded; login is pending"
+                if user_session.auth_status == "PENDING_REVIEW"
+                else "Invalid verification code"
+            ),
         )
 
     user_session.auth_status = "AUTHENTICATED"
     user_session.auth_reason_codes = []
     user_session.verification_code_hash = None
     user_session.verification_expires_at = None
-    user_session.verification_requested_at = None
-    user_session.verification_attempts = 0
-    db.flush()
-    return auth_service.create_access_token(
-        user_session.user_id, user_session.session_id
+
+    access_token = auth_service.create_access_token(
+        user_session.user_id,
+        user_session.session_id,
     )
+
+    db.flush()
+    return access_token

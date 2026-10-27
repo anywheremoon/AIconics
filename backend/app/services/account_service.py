@@ -5,16 +5,19 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.services.graph_sync_service import sync_transfer
 from app.models.account_model import Account
 from app.repositories import account_repository, transaction_repository
 from app.schemas.final_risk_schema import FinalRiskResult
+from app.services.graph_sync_service import sync_transfer
 from app.services.risk_assessment_service import create_risk_assessment
 from app.services.risk_decision_service import (
     decide_risk,
     transaction_status_for_decision,
 )
-from app.services.risk_gate_service import ensure_transaction_allowed
+from app.services.risk_gate_service import (
+    ensure_transaction_allowed,
+    lock_user_for_risk_transition,
+)
 
 
 OPENING_BALANCE = Decimal("100000.00")
@@ -287,19 +290,17 @@ def stage_transfer_with_risk(
     risk_result: FinalRiskResult,
 ):
     """
-    백엔드 내부에서 계산한 위험 평가 결과로 이체를 준비한다.
+    백엔드 내부에서 계산한 최종 위험 평가 결과로 이체를 준비한다.
 
     APPROVED일 때만 잔액을 변경한다.
     거래, 평가, 잔액 변경은 같은 DB 트랜잭션에 남긴다.
-    이 함수는 commit하지 않는다. 호출자가 commit 또는 rollback한다.
+    호출자가 commit 또는 rollback한다.
     """
     if not isinstance(risk_result, FinalRiskResult):
         raise TypeError(
             "risk_result는 FinalRiskResult여야 합니다."
         )
 
-    # 외부에서 전달된 결과가 잘못 조합되었더라도
-    # 고위험 점수가 APPROVED로 처리되지 않도록 검사
     expected_decision = decide_risk(
         risk_result.final_risk_score
     )["decision"]
@@ -309,7 +310,9 @@ def stage_transfer_with_risk(
             "최종 점수와 거래 결정이 일치하지 않습니다."
         )
 
-    ensure_transaction_allowed(db, user_id)
+    # 기존 이벤트 등급으로 조기 차단하지 않고,
+    # 사용자 잠금을 유지한 상태에서 최종 평가 결과를 적용한다.
+    lock_user_for_risk_transition(db, user_id)
 
     sender = get_my_account(db, user_id)
     request_id = str(data.request_id)
@@ -333,7 +336,6 @@ def stage_transfer_with_risk(
             detail="Cannot transfer to the same account",
         )
 
-    # 송신·수신 계좌를 같은 순서로 잠금
     locked = {
         account.id: account
         for account in account_repository.lock_by_ids(
@@ -395,6 +397,7 @@ def stage_transfer_with_risk(
         result=risk_result,
     )
 
+    # MEDIUM / HIGH / CRITICAL은 거래와 평가만 저장한다.
     if risk_result.decision == "APPROVED":
         sender.balance -= data.amount
         recipient.balance += data.amount

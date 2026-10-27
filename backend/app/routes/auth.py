@@ -30,6 +30,11 @@ from app.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
+class SessionLogoutRequest(BaseModel):
+    session_id: str = Field(
+        min_length=1,
+        max_length=36,
+    )
 
 class SessionLoginRequest(LoginRequest):
     device_id: str | None = Field(default=None, min_length=1, max_length=255)
@@ -39,7 +44,9 @@ class SessionLoginRequest(LoginRequest):
 class SessionTokenResponse(TokenResponse):
     session_id: str
     login_status: Literal[
-        "AUTHENTICATED", "REQUIRE_VERIFICATION", "PENDING"
+        "AUTHENTICATED",
+        "REQUIRE_VERIFICATION",
+        "PENDING_REVIEW",
     ]
     requires_verification: bool
     reason_codes: list[str]
@@ -126,7 +133,7 @@ def login(
             )
         )
 
-        # 作成したセッションIDをJWTに含める
+        # 기기 신뢰 상태와 로그인 패턴을 바탕으로 인증 상태를 결정한다.
         login_status, reason_codes = auth_service.determine_login_state(
             trust_status,
             pattern,
@@ -264,6 +271,7 @@ def read_current_user(
 ):
     return current_user
 
+
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 def delete_current_user(
     current_user=Depends(get_current_user),
@@ -286,7 +294,7 @@ def logout(
     db: Session = Depends(get_db),
 ):
     try:
-        # JWT의 세션과 종료하려는 세션이 일치해야 한다.
+        # JWT의 세션 ID와 종료하려는 세션 ID가 일치하는지 확인한다.
         auth_service.require_matching_token_session(
             request,
             data.session_id,
