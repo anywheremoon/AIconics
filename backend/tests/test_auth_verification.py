@@ -202,7 +202,7 @@ def test_too_many_invalid_codes_moves_session_to_pending(client, db):
     assert response.status_code == 403
 
 
-def test_shared_device_login_is_pending(client, db):
+def test_shared_device_login_requires_verification(client, db):
     owner = create_user(db, "device-owner")
     user = create_user(db, "pending-user")
     device_repository.touch_device_and_link(db, "shared-device", owner.id)
@@ -211,8 +211,8 @@ def test_shared_device_login_is_pending(client, db):
     response = login(client, user.username, "shared-device")
     assert response.status_code == 200
     body = response.json()
-    assert body["login_status"] == "PENDING_REVIEW"
-    assert body["requires_verification"] is False
+    assert body["login_status"] == "REQUIRE_VERIFICATION"
+    assert body["requires_verification"] is True
     assert "SHARED_DEVICE" in body["reason_codes"]
     assert body["access_token"] is None
     assert body["verification_token"]
@@ -224,7 +224,27 @@ def test_shared_device_login_is_pending(client, db):
             "Authorization": f"Bearer {body['verification_token']}"
         },
     )
-    assert verification_request.status_code == 403
+    assert verification_request.status_code == 200
+
+
+def test_recent_account_switch_on_shared_device_is_pending(client, db):
+    owner = create_user(db, "switch-owner")
+    user = create_user(db, "switch-user")
+
+    owner_response = login(client, owner.username, "switch-device")
+    assert owner_response.status_code == 200
+
+    response = login(client, user.username, "switch-device")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["login_status"] == "PENDING_REVIEW"
+    assert body["requires_verification"] is False
+    assert body["reason_codes"] == [
+        "SHARED_DEVICE",
+        "ACCOUNT_SWITCH_DETECTED",
+    ]
+    assert body["access_token"] is None
+    assert body["verification_token"]
 
 
 def test_verification_token_is_bound_to_its_session(client, db):

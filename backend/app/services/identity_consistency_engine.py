@@ -16,14 +16,14 @@ def calculate_identity_score(
     contributions = {}
 
     if device_trust_status == "NEW_DEVICE":
-        score += 20
+        score += 10
         reasons.append("NEW_DEVICE")
-        contributions["NEW_DEVICE"] = 20
+        contributions["NEW_DEVICE"] = 10
 
     elif device_trust_status == "SHARED_DEVICE":
-        score += 25
+        score += 10
         reasons.append("SHARED_DEVICE")
-        contributions["SHARED_DEVICE"] = 25
+        contributions["SHARED_DEVICE"] = 10
 
     if ip_changed:
         score += 10

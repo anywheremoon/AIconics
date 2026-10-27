@@ -67,18 +67,18 @@ def test_three_domain_weights_are_used_when_graph_is_unavailable():
 def test_shared_device_is_not_scored_in_identity_and_graph():
     result = assess_final_risk(
         behavior_score=0,
-        identity_score=25,
+        identity_score=10,
         transaction_score=0,
-        graph_score=25,
-        identity_reasons=[_reason("SHARED_DEVICE", "IDENTITY", 25)],
-        graph_reasons=[_reason("SHARED_DEVICE", "GRAPH", 25)],
+        graph_score=10,
+        identity_reasons=[_reason("SHARED_DEVICE", "IDENTITY", 10)],
+        graph_reasons=[_reason("SHARED_DEVICE", "GRAPH", 10)],
     )
 
-    assert result.graph_score == 25
+    assert result.graph_score == 10
     assert result.effective_scores["graph"] == 0
-    assert result.duplicate_score_deductions == {"graph": 25}
+    assert result.duplicate_score_deductions == {"graph": 10}
     assert result.weighted_contributions.graph == 0
-    assert result.final_risk_score == pytest.approx(8.75)
+    assert result.final_risk_score == pytest.approx(3.5)
     assert [(reason.score_type, reason.reason_code) for reason in result.reasons] == [
         ("IDENTITY", "SHARED_DEVICE")
     ]

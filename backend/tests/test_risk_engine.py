@@ -82,8 +82,8 @@ def test_insufficient_profile_keeps_ml_and_independent_rules(_detect_anomaly):
     )
 
     assert result["behavior_score"] == 20
-    assert result["identity_score"] == 50
-    assert result["risk_score"] == 70
+    assert result["identity_score"] == 40
+    assert result["risk_score"] == 60
     assert result["profile_deviation_score"] == 0
     assert {reason["reason_code"] for reason in result["reasons"]} == {
         "ML_ANOMALY",
@@ -116,8 +116,8 @@ def test_shared_device_affects_identity_risk(_detect_anomaly):
     )
 
     assert result["behavior_score"] == 0
-    assert result["identity_score"] == 25
-    assert result["risk_score"] == 25
+    assert result["identity_score"] == 10
+    assert result["risk_score"] == 10
     assert result["risk_level"] == "LOW"
     assert {reason["reason_code"] for reason in result["reasons"]} == {
         "SHARED_DEVICE",

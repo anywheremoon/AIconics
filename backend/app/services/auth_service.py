@@ -256,15 +256,15 @@ def determine_login_state(
     if normalized_role == "ADMIN":
         return "AUTHENTICATED", []
 
-    reasons: list[str] = []
+    if pattern.get("account_switch_detected"):
+        reasons = []
+        if trust_status.value == "SHARED_DEVICE":
+            reasons.append("SHARED_DEVICE")
+        reasons.append("ACCOUNT_SWITCH_DETECTED")
+        return "PENDING_REVIEW", reasons
 
     if trust_status.value == "SHARED_DEVICE":
-        reasons.append("SHARED_DEVICE")
-    if pattern.get("account_switch_detected"):
-        reasons.append("ACCOUNT_SWITCH_DETECTED")
-
-    if reasons:
-        return "PENDING_REVIEW", reasons
+        return "REQUIRE_VERIFICATION", ["SHARED_DEVICE"]
 
     if trust_status.value == "NEW_DEVICE":
         return "REQUIRE_VERIFICATION", ["NEW_DEVICE"]

@@ -55,7 +55,7 @@ def test_graph_risk_shared_device(monkeypatch):
 
     result = graph_risk_engine.analyze_graph_risk(1)
 
-    assert result["graph_score"] == 25
+    assert result["graph_score"] == 10
     assert result["reasons"] == ["SHARED_DEVICE"]
     assert result["shared_devices"] == shared_devices
 
@@ -77,7 +77,7 @@ def test_graph_risk_multiple_patterns(monkeypatch):
 
     result = graph_risk_engine.analyze_graph_risk(1)
 
-    assert result["graph_score"] == 65
+    assert result["graph_score"] == 45
     assert result["reasons"] == [
         "SHARED_DEVICE",
         "SHARED_IP_DEVICE",
@@ -110,11 +110,11 @@ def test_graph_compound_pattern_does_not_double_count_components(monkeypatch):
 
     # The compound pattern supersedes SHARED_DEVICE and COMMON_BENEFICIARY,
     # so those underlying facts are not scored twice.
-    assert result["graph_score"] == 50
+    assert result["graph_score"] == 35
     assert result["reasons"] == [
         "SHARED_IP_DEVICE",
         "SHARED_DEVICE_COMMON_BENEFICIARY",
     ]
     assert [
         reason["score_contribution"] for reason in result["reason_details"]
-    ] == [15, 35]
+    ] == [10, 25]

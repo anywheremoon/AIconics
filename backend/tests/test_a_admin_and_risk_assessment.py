@@ -133,7 +133,7 @@ def test_admin_login_bypasses_new_device_verification(client, db):
     assert body["verification_token"] is None
 
 
-def test_regular_user_is_still_held_on_shared_device(client, db):
+def test_regular_user_verifies_shared_device(client, db):
     existing_user = create_user(db, "device-owner")
     regular_user = create_user(db, "regular-user")
     shared_device_id = "shared-regular-test-device"
@@ -150,7 +150,8 @@ def test_regular_user_is_still_held_on_shared_device(client, db):
     body = response.json()
     assert body["user"]["role"] == "USER"
     assert body["device_trust_status"] == "SHARED_DEVICE"
-    assert body["login_status"] == "PENDING_REVIEW"
+    assert body["login_status"] == "REQUIRE_VERIFICATION"
+    assert body["requires_verification"] is True
     assert body["reason_codes"] == ["SHARED_DEVICE"]
     assert body["access_token"] is None
     assert body["verification_token"]
