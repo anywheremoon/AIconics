@@ -3,6 +3,7 @@ annotated-types==0.7.0
 anyio==4.14.1
 click==8.4.2
 colorama==0.4.6
+eth-account==0.14.0
 fastapi==0.138.2
 greenlet==3.5.3
 h11==0.16.0
