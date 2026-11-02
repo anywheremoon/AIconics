@@ -6,57 +6,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "./libraries/EthVaultTypes.sol";
+import "./libraries/EthVaultPolicy.sol";
 
 contract EthRiskVault is Ownable, ReentrancyGuard, EIP712 {
 
-    enum RiskLevel {
-        LOW,
-        MEDIUM,
-        HIGH,
-        CRITICAL
-    }
 
-    enum TransferStatus {
-        REQUESTED,
-        ANALYZED,
-        AUTHENTICATED,
-        APPROVED,
-        EXECUTED,
-        REJECTED,
-        CANCELLED
-    }
-
-    struct TransferRequest {
-        address sender;
-        address payable recipient;
-        uint256 amount;
-        RiskLevel riskLevel;
-        TransferStatus status;
-        uint256 createdAt;
-        uint256 riskScore;
-        bool requiresAuth;
-        bool requiresAdminApproval;
-        bool authCompleted;
-        bool adminApproved;
-        uint256 timelockUntil;
-        uint256 deadline;
-        bytes32 analysisHash;
-    }
-
-    struct RiskResult {
-        bytes32 requestId;
-        address sender;
-        address recipient;
-        uint256 amount;
-        uint256 riskScore;
-        uint8 riskLevel;
-        bool requiresAuth;
-        bool requiresAdminApproval;
-        uint256 timelockUntil;
-        uint256 deadline;
-        bytes32 analysisHash;
-        bytes32 nonce;
-    }
+    // EthVaultTypes 라이브러리의 자료형 사용
+    // 모든 기존 함수에서 타입 이름을 변경해야 함
 
     uint256 public nextRequestId;
 
@@ -65,7 +22,7 @@ contract EthRiskVault is Ownable, ReentrancyGuard, EIP712 {
     mapping(bytes32 => bool) public usedNonces;
 
 
-    mapping(bytes32 => TransferRequest) private transfers;
+    mapping(bytes32 => EthVaultTypes.TransferRequest) private transfers;
 
 
 bytes32 private constant RISK_RESULT_TYPEHASH = keccak256(
@@ -73,7 +30,7 @@ bytes32 private constant RISK_RESULT_TYPEHASH = keccak256(
 );
 
 function _verifyRiskSignature(
-    RiskResult calldata result,
+    EthVaultTypes.RiskResult calldata result,
     bytes calldata signature
 ) internal view returns (bool) {
     bytes32 structHash = keccak256(
@@ -133,13 +90,13 @@ function requestTransfer(
 
 
 
-    TransferRequest storage newTransfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage newTransfer = transfers[requestId];
 
     newTransfer.sender = msg.sender;
     newTransfer.recipient = recipient;
     newTransfer.amount = msg.value;
-    newTransfer.riskLevel = RiskLevel.LOW;
-    newTransfer.status = TransferStatus.REQUESTED;
+    newTransfer.riskLevel = EthVaultTypes.RiskLevel.LOW;
+    newTransfer.status = EthVaultTypes.TransferStatus.REQUESTED;
     newTransfer.createdAt = block.timestamp;
 
 
@@ -156,17 +113,17 @@ function requestTransfer(
 
 event RiskResultSubmitted(
     bytes32 indexed requestId,
-    RiskLevel riskLevel
+    EthVaultTypes.RiskLevel riskLevel
 );
 
 function submitRiskResult(
-    RiskResult calldata result,
+    EthVaultTypes.RiskResult calldata result,
     bytes calldata signature
 ) external nonReentrant {
-    TransferRequest storage transfer = transfers[result.requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[result.requestId];
 
     require(transfer.sender != address(0), "Request not found");
-    require(transfer.status == TransferStatus.REQUESTED, "Invalid status");
+    require(transfer.status == EthVaultTypes.TransferStatus.REQUESTED, "Invalid status");
 
     require(block.timestamp <= result.deadline, "Signature expired");
     require(!usedNonces[result.nonce], "Nonce already used");
@@ -175,36 +132,29 @@ function submitRiskResult(
     require(transfer.recipient == result.recipient, "Recipient mismatch");
     require(transfer.amount == result.amount, "Amount mismatch");
 
-    require(result.riskLevel <= uint8(RiskLevel.CRITICAL), "Invalid risk level");
+    require(result.riskLevel <= uint8(EthVaultTypes.RiskLevel.CRITICAL), "Invalid risk level");
     require(_verifyRiskSignature(result, signature), "Invalid signature");
 
     // A 獄쏄퉮肉??뽰벥 ?袁る퓮 ?源껎닋癰??類ㅼ퐠 ?類ㅼ뵥
-    if (result.riskLevel == uint8(RiskLevel.LOW)) {
-        require(!result.requiresAuth && !result.requiresAdminApproval, "Invalid LOW policy");
-        require(result.timelockUntil == 0, "Invalid LOW timelock");
-    } else if (result.riskLevel == uint8(RiskLevel.MEDIUM)) {
-        require(result.requiresAuth && !result.requiresAdminApproval, "Invalid MEDIUM policy");
-        require(result.timelockUntil == 0, "Invalid MEDIUM timelock");
-    } else if (result.riskLevel == uint8(RiskLevel.HIGH)) {
-        require(result.requiresAuth && result.requiresAdminApproval, "Invalid HIGH policy");
-        require(result.timelockUntil >= block.timestamp, "Invalid HIGH timelock");
-    } else {
-        require(result.requiresAuth && result.requiresAdminApproval, "Invalid CRITICAL policy");
-        require(result.timelockUntil == 0, "Invalid CRITICAL timelock");
-    }
+    EthVaultPolicy.validate(
+    result.riskLevel,
+    result.requiresAuth,
+    result.requiresAdminApproval,
+    result.timelockUntil
+    );
 
     usedNonces[result.nonce] = true;
 
     transfer.riskScore = result.riskScore;
-    transfer.riskLevel = RiskLevel(result.riskLevel);
+    transfer.riskLevel = EthVaultTypes.RiskLevel(result.riskLevel);
     transfer.requiresAuth = result.requiresAuth;
     transfer.requiresAdminApproval = result.requiresAdminApproval;
     transfer.timelockUntil = result.timelockUntil;
     transfer.deadline = result.deadline;
     transfer.analysisHash = result.analysisHash;
 
-    if (result.riskLevel == uint8(RiskLevel.CRITICAL)) {
-        transfer.status = TransferStatus.REJECTED;
+    if (result.riskLevel == uint8(EthVaultTypes.RiskLevel.CRITICAL)) {
+        transfer.status = EthVaultTypes.TransferStatus.REJECTED;
 
         uint256 refundAmount = transfer.amount;
         transfer.amount = 0;
@@ -212,7 +162,7 @@ function submitRiskResult(
         (bool success, ) = payable(transfer.sender).call{value: refundAmount}("");
         require(success, "Refund failed");
     } else {
-        transfer.status = TransferStatus.ANALYZED;
+        transfer.status = EthVaultTypes.TransferStatus.ANALYZED;
     }
 
     emit RiskResultSubmitted(result.requestId, transfer.riskLevel);
@@ -223,15 +173,15 @@ event AuthCompleted(bytes32 indexed requestId);
 function completeAuth(bytes32 requestId) external {
     require(msg.sender == authOperator, "Not authorized");
 
-    TransferRequest storage transfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[requestId];
 
     require(transfer.sender != address(0), "Request not found");
-    require(transfer.status == TransferStatus.ANALYZED, "Invalid status");
+    require(transfer.status == EthVaultTypes.TransferStatus.ANALYZED, "Invalid status");
     require(transfer.requiresAuth, "Auth not required");
     require(!transfer.authCompleted, "Auth already completed");
 
     transfer.authCompleted = true;
-    transfer.status = TransferStatus.AUTHENTICATED;
+    transfer.status = EthVaultTypes.TransferStatus.AUTHENTICATED;
 
     emit AuthCompleted(requestId);
 }
@@ -239,17 +189,17 @@ function completeAuth(bytes32 requestId) external {
 event TransferApproved(bytes32 indexed requestId);
 
 function approveTransfer(bytes32 requestId) external onlyOwner {
-    TransferRequest storage transfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[requestId];
 
     require(transfer.sender != address(0), "Request not found");
-    require(transfer.riskLevel == RiskLevel.HIGH, "Not HIGH risk");
-    require(transfer.status == TransferStatus.AUTHENTICATED, "Invalid status");
+    require(transfer.riskLevel == EthVaultTypes.RiskLevel.HIGH, "Not HIGH risk");
+    require(transfer.status == EthVaultTypes.TransferStatus.AUTHENTICATED, "Invalid status");
     require(transfer.requiresAdminApproval, "Approval not required");
     require(transfer.authCompleted, "Auth not completed");
     require(!transfer.adminApproved, "Already approved");
 
     transfer.adminApproved = true;
-    transfer.status = TransferStatus.APPROVED;
+    transfer.status = EthVaultTypes.TransferStatus.APPROVED;
 
     emit TransferApproved(requestId);
 }
@@ -261,7 +211,7 @@ event TransferExecuted(
 );
 
 function executeTransfer(bytes32 requestId) external nonReentrant {
-    TransferRequest storage transfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[requestId];
 
     require(transfer.sender != address(0), "Request not found");
     require(transfer.amount > 0, "No ETH to transfer");
@@ -271,13 +221,13 @@ function executeTransfer(bytes32 requestId) external nonReentrant {
     );
 
     require(
-        transfer.status == TransferStatus.ANALYZED ||
-        transfer.status == TransferStatus.AUTHENTICATED ||
-        transfer.status == TransferStatus.APPROVED,
+        transfer.status == EthVaultTypes.TransferStatus.ANALYZED ||
+        transfer.status == EthVaultTypes.TransferStatus.AUTHENTICATED ||
+        transfer.status == EthVaultTypes.TransferStatus.APPROVED,
         "Invalid status"
     );
 
-    require(transfer.riskLevel != RiskLevel.CRITICAL, "Critical risk");
+    require(transfer.riskLevel != EthVaultTypes.RiskLevel.CRITICAL, "Critical risk");
 
     if (transfer.requiresAuth) {
         require(transfer.authCompleted, "Auth required");
@@ -296,7 +246,7 @@ function executeTransfer(bytes32 requestId) external nonReentrant {
     address payable recipient = transfer.recipient;
 
     // ??뷀닊 ?袁⑸퓠 ?怨밴묶 癰궰野?
-    transfer.status = TransferStatus.EXECUTED;
+    transfer.status = EthVaultTypes.TransferStatus.EXECUTED;
     transfer.amount = 0;
 
     (bool success, ) = recipient.call{value: amount}("");
@@ -315,16 +265,16 @@ function rejectTransfer(bytes32 requestId)
     onlyOwner
     nonReentrant
 {
-    TransferRequest storage transfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[requestId];
 
     require(transfer.sender != address(0), "Request not found");
     require(transfer.amount > 0, "No ETH to refund");
 
     require(
-        transfer.status == TransferStatus.REQUESTED ||
-        transfer.status == TransferStatus.ANALYZED ||
-        transfer.status == TransferStatus.AUTHENTICATED ||
-        transfer.status == TransferStatus.APPROVED,
+        transfer.status == EthVaultTypes.TransferStatus.REQUESTED ||
+        transfer.status == EthVaultTypes.TransferStatus.ANALYZED ||
+        transfer.status == EthVaultTypes.TransferStatus.AUTHENTICATED ||
+        transfer.status == EthVaultTypes.TransferStatus.APPROVED,
         "Invalid status"
     );
 
@@ -332,7 +282,7 @@ function rejectTransfer(bytes32 requestId)
     address payable sender = payable(transfer.sender);
 
     // ??롰뀑 ?袁⑸퓠 ?怨밴묶?? ?遺용만 癰궰野?
-    transfer.status = TransferStatus.REJECTED;
+    transfer.status = EthVaultTypes.TransferStatus.REJECTED;
     transfer.amount = 0;
 
     (bool success, ) = sender.call{value: refundAmount}("");
@@ -352,16 +302,16 @@ function cancelExpired(bytes32 requestId)
     external
     nonReentrant
 {
-    TransferRequest storage transfer = transfers[requestId];
+    EthVaultTypes.TransferRequest storage transfer = transfers[requestId];
 
     require(transfer.sender != address(0), "Request not found");
     require(msg.sender == transfer.sender, "Not sender");
     require(transfer.amount > 0, "No ETH to refund");
 
     require(
-        transfer.status != TransferStatus.EXECUTED &&
-        transfer.status != TransferStatus.REJECTED &&
-        transfer.status != TransferStatus.CANCELLED,
+        transfer.status != EthVaultTypes.TransferStatus.EXECUTED &&
+        transfer.status != EthVaultTypes.TransferStatus.REJECTED &&
+        transfer.status != EthVaultTypes.TransferStatus.CANCELLED,
         "Already finalized"
     );
 
@@ -372,7 +322,7 @@ function cancelExpired(bytes32 requestId)
 
     uint256 refundAmount = transfer.amount;
 
-    transfer.status = TransferStatus.CANCELLED;
+    transfer.status = EthVaultTypes.TransferStatus.CANCELLED;
     transfer.amount = 0;
 
     (bool success, ) = payable(transfer.sender).call{value: refundAmount}("");
