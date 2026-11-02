@@ -4,7 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "test": "hardhat test --config hardhat.b.config.ts",
+  "test:vault": "hardhat test test/EthRiskVault.test.ts --config hardhat.b.config.ts",
+  "test:security": "hardhat test test/EthRiskVaultSecurity.test.ts --config hardhat.b.config.ts",
+  "compile:vault": "hardhat compile --config hardhat.b.config.ts",
+  "node:vault": "hardhat node --config hardhat.b.config.ts",
+  "deploy:vault": "node scripts/deploy-eth-risk-vault.mjs",
+  "verify:vault": "node scripts/verify-eth-risk-vault.mjs"
   },
   "keywords": [],
   "author": "",
