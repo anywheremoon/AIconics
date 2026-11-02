@@ -17,6 +17,7 @@ from app.models.event_model import Event
 from app.models.transaction_model import Transaction
 from app.models.risk_assessment_model import RiskAssessment
 from app.models.risk_factor_model import RiskFactor
+from app.models.eth_vault_model import EthVaultTransfer
 
 # API 라우터
 from app.routes import (
@@ -24,6 +25,7 @@ from app.routes import (
     auth,
     dashboard,
     events,
+    eth_vault,
     graph,
     integrity,
     risk_assessments,
@@ -89,6 +91,7 @@ app.include_router(risk_assessments.router)
 app.include_router(risk_score.router)
 app.include_router(transaction_risk.router)
 app.include_router(events.router)
+app.include_router(eth_vault.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
 app.include_router(security_guidance.router)
