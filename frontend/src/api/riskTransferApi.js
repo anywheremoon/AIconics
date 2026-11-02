@@ -31,7 +31,7 @@ export async function analyzeRiskTransfer(
 
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/risk-transfer/analyze`,
+      `${API_BASE_URL}/api/risk-transfers/sign`,
       {
         method: "POST",
         headers: {
@@ -55,7 +55,23 @@ export async function analyzeRiskTransfer(
       );
     }
 
-    return data;
+        const message = data?.typedData?.message;
+    const domain = data?.typedData?.domain;
+
+    if (!message || !domain) {
+      throw new Error("위험 분석 API 응답 형식이 올바르지 않습니다.");
+    }
+
+    return {
+      transfer: {
+        ...message,
+        chainId: domain.chainId,
+        verifyingContract: domain.verifyingContract,
+      },
+      signature: data.signature,
+      signer: data.signer,
+    };
+    
   } catch (err) {
     if (err.name === "AbortError") {
       throw new Error("위험 분석 요청 시간이 초과되었습니다.");

@@ -74,6 +74,13 @@ function AppNavigation() {
             내 계좌
           </NavLink>
 
+          <NavLink
+            to="/eth-vault"
+            className={getNavLinkClass}
+          >
+            ETH 금고
+          </NavLink>
+
           {user.role === "ADMIN" && (
             <>
               <NavLink
@@ -95,6 +102,13 @@ function AppNavigation() {
                 className={getNavLinkClass}
               >
                 행동 로그
+              </NavLink>
+
+              <NavLink
+                to="/admin/eth-vault"
+                className={getNavLinkClass}
+              >
+                ETH 금고 관리
               </NavLink>
             </>
           )}

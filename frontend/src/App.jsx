@@ -38,6 +38,11 @@ import TransactionResultPage from "./pages/TransactionResultPage.jsx";
 // 권한 없음 페이지
 import ForbiddenPage from "./pages/ForbiddenPage.jsx";
 
+import RiskTransferPage from "./pages/RiskTransferPage.jsx";
+
+import EthVaultPage from "./pages/EthVaultPage";
+import AdminEthVaultPage from "./pages/AdminEthVaultPage";
+import EthVaultTest from "./eth-vault-test";
 
 // ================================
 // 루트 주소("/") 이동 처리
@@ -154,6 +159,11 @@ function NotFoundPage() {
 // ================================
 // 실제 앱 라우팅
 // ================================
+function AuthenticatedRiskTransferPage() {
+  const { token } = useAuth();
+
+  return <RiskTransferPage accessToken={token} />;
+}
 
 function AppRoutes() {
   return (
@@ -260,11 +270,52 @@ function AppRoutes() {
           element={<ForbiddenPage />}
         />
 
+                <Route
+          path="/risk-transfer"
+          element={
+            <RequireAuth>
+              <AuthenticatedRiskTransferPage />
+            </RequireAuth>
+          }
+        />
+
         {/* 없는 주소 */}
         <Route
           path="*"
           element={<NotFoundPage />}
         />
+
+       {/* ETH 금고: 로그인 사용자 */}
+        <Route
+          path="/eth-vault"
+          element={
+            <RequireAuth>
+              <EthVaultPage />
+            </RequireAuth>
+          }
+        />
+
+        {/* ETH 금고 관리: 관리자 */}
+        <Route
+          path="/admin/eth-vault"
+          element={
+            <RequireAdmin>
+              <AdminEthVaultPage />
+            </RequireAdmin>
+          }
+        />
+
+        {/* 개발 환경에서만 제공하는 관리자용 Mock 테스트 */}
+        {import.meta.env.DEV && (
+          <Route
+            path="/eth-vault-test"
+            element={
+              <RequireAdmin>
+                <EthVaultTest />
+              </RequireAdmin>
+            }
+          />
+)}
       </Routes>
     </>
   );
