@@ -135,7 +135,9 @@ def login(
 
         # 기기 신뢰 상태와 로그인 패턴을 바탕으로 인증 상태를 결정한다.
         login_status, reason_codes = auth_service.determine_login_state(
-            trust_status, pattern
+            trust_status,
+            pattern,
+            user_role=login_result["user"]["role"],
         )
         user_session.auth_status = login_status
         user_session.auth_reason_codes = reason_codes

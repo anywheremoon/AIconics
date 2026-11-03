@@ -57,19 +57,36 @@ def _b64decode(value: str) -> bytes:
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PASSWORD_ITERATIONS)
-    return f"pbkdf2_sha256${PASSWORD_ITERATIONS}${_b64encode(salt)}${_b64encode(digest)}"
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode(),
+        salt,
+        PASSWORD_ITERATIONS,
+    )
+    return (
+        f"pbkdf2_sha256${PASSWORD_ITERATIONS}"
+        f"${_b64encode(salt)}${_b64encode(digest)}"
+    )
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     try:
         algorithm, iterations, salt, expected = password_hash.split("$", 3)
-        if algorithm != "pbkdf2_sha256" or int(iterations) != PASSWORD_ITERATIONS:
+
+        if (
+            algorithm != "pbkdf2_sha256"
+            or int(iterations) != PASSWORD_ITERATIONS
+        ):
             return False
+
         actual = hashlib.pbkdf2_hmac(
-            "sha256", plain_password.encode(), _b64decode(salt), int(iterations)
+            "sha256",
+            plain_password.encode(),
+            _b64decode(salt),
+            int(iterations),
         )
         return hmac.compare_digest(_b64decode(expected), actual)
+
     except (ValueError, TypeError, binascii.Error):
         return False
 
@@ -82,12 +99,24 @@ def create_access_token(user_id: int, session_id: str) -> str:
         "session_id": str(session_id),
         "purpose": "access",
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()),
+        "exp": int(
+            (now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)).timestamp()
+        ),
     }
-    encoded_header = _b64encode(json.dumps(header, separators=(",", ":")).encode())
-    encoded_payload = _b64encode(json.dumps(payload, separators=(",", ":")).encode())
+
+    encoded_header = _b64encode(
+        json.dumps(header, separators=(",", ":")).encode()
+    )
+    encoded_payload = _b64encode(
+        json.dumps(payload, separators=(",", ":")).encode()
+    )
     signing_input = f"{encoded_header}.{encoded_payload}".encode()
-    signature = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
+    signature = hmac.new(
+        JWT_SECRET.encode(),
+        signing_input,
+        hashlib.sha256,
+    ).digest()
+
     return f"{encoded_header}.{encoded_payload}.{_b64encode(signature)}"
 
 
@@ -101,9 +130,13 @@ def create_verification_token(user_id: int, session_id: str) -> str:
         "purpose": "verification",
         "iat": int(now.timestamp()),
         "exp": int(
-            (now + timedelta(minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES)).timestamp()
+            (
+                now
+                + timedelta(minutes=VERIFICATION_TOKEN_EXPIRE_MINUTES)
+            ).timestamp()
         ),
     }
+
     encoded_header = _b64encode(
         json.dumps(header, separators=(",", ":")).encode()
     )
@@ -112,8 +145,11 @@ def create_verification_token(user_id: int, session_id: str) -> str:
     )
     signing_input = f"{encoded_header}.{encoded_payload}".encode()
     signature = hmac.new(
-        JWT_SECRET.encode(), signing_input, hashlib.sha256
+        JWT_SECRET.encode(),
+        signing_input,
+        hashlib.sha256,
     ).digest()
+
     return f"{encoded_header}.{encoded_payload}.{_b64encode(signature)}"
 
 
@@ -124,18 +160,34 @@ def _verify_token_claims(token: str, *, expected_purpose: str) -> dict:
         detail="Invalid or expired access token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
     try:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
         header = json.loads(_b64decode(encoded_header))
+
         if header != {"alg": "HS256", "typ": "JWT"}:
             raise ValueError("Unsupported JWT header")
+
         signing_input = f"{encoded_header}.{encoded_payload}".encode()
-        expected = hmac.new(JWT_SECRET.encode(), signing_input, hashlib.sha256).digest()
-        if not hmac.compare_digest(expected, _b64decode(encoded_signature)):
+        expected = hmac.new(
+            JWT_SECRET.encode(),
+            signing_input,
+            hashlib.sha256,
+        ).digest()
+
+        if not hmac.compare_digest(
+            expected,
+            _b64decode(encoded_signature),
+        ):
             raise ValueError("Invalid signature")
+
         payload = json.loads(_b64decode(encoded_payload))
-        if int(payload["exp"]) <= int(datetime.now(timezone.utc).timestamp()):
+
+        if int(payload["exp"]) <= int(
+            datetime.now(timezone.utc).timestamp()
+        ):
             raise ValueError("Expired token")
+
         user_id = int(payload["sub"])
         session_id = payload["session_id"]
 
@@ -154,6 +206,7 @@ def _verify_token_claims(token: str, *, expected_purpose: str) -> dict:
             "session_id": session_id,
             "purpose": expected_purpose,
         }
+
     except (
         ValueError,
         TypeError,
@@ -190,14 +243,17 @@ def get_current_user(
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     claims = _verify_access_token_claims(credentials.credentials)
     user = user_repository.find_by_id(db, claims["user_id"])
+
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     user_session = (
         db.query(UserSession)
         .filter(
@@ -234,22 +290,49 @@ def get_current_user(
     return user
 
 
-def determine_login_state(trust_status, pattern: dict) -> tuple[str, list[str]]:
-    """Map existing device and login signals to the public login contract."""
-    reasons: list[str] = []
+def determine_login_state(
+    trust_status,
+    pattern: dict,
+    *,
+    user_role: str = "USER",
+) -> tuple[str, list[str]]:
+    """
+    기기 상태와 로그인 패턴을 바탕으로 인증 상태를 결정한다.
 
-    if trust_status.value == "SHARED_DEVICE":
+    - 기존 관리자 예외 유지
+    - 계정 전환: 추가 인증 필요
+    - 공유 기기: 추가 인증 필요
+    - 신규 기기: 추가 인증 필요
+    - 나머지: 인증 완료
+
+    계정 전환 감지 정보는 유지하며,
+    추가 인증을 완료하기 전에는 접근 토큰을 발급하지 않는다.
+    """
+    normalized_role = (
+        user_role.strip().upper()
+        if isinstance(user_role, str)
+        else ""
+    )
+
+    if normalized_role == "ADMIN":
+        return "AUTHENTICATED", []
+
+    device_status = trust_status.value
+    reasons = []
+
+    if device_status == "SHARED_DEVICE":
         reasons.append("SHARED_DEVICE")
+    elif device_status == "NEW_DEVICE":
+        reasons.append("NEW_DEVICE")
+
     if pattern.get("account_switch_detected"):
         reasons.append("ACCOUNT_SWITCH_DETECTED")
 
     if reasons:
-        return "PENDING_REVIEW", reasons
-
-    if trust_status.value == "NEW_DEVICE":
-        return "REQUIRE_VERIFICATION", ["NEW_DEVICE"]
+        return "REQUIRE_VERIFICATION", reasons
 
     return "AUTHENTICATED", []
+
 
 def require_matching_token_session(
     request: Request,
@@ -278,17 +361,24 @@ def require_matching_token_session(
 def create_virtual_account(db: Session, user_id: int):
     """Integration point owned by B; no-op until B's service is merged."""
     try:
-        from app.services.account_service import create_virtual_account as account_creator
+        from app.services.account_service import (
+            create_virtual_account as account_creator,
+        )
     except ModuleNotFoundError as error:
         if error.name == "app.services.account_service":
             return None
         raise
+
     return account_creator(db, user_id)
 
 
 def register_user(db: Session, data, ip_address: str | None = None):
     if user_repository.username_exists(db, data.username):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already exists",
+        )
+
     try:
         user = user_repository.create_user(
             db,
@@ -316,7 +406,11 @@ def register_user(db: Session, data, ip_address: str | None = None):
 
     except IntegrityError as error:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists") from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already exists",
+        ) from error
+
     except Exception:
         db.rollback()
         raise
@@ -347,19 +441,36 @@ def login_user(
     ip_address: str | None = None,
 ):
     user = user_repository.find_by_username(db, data.username)
-    if user is None or not verify_password(data.password, user.password_hash):
-        _save_login_history(db, user.id if user else None, device_id, ip_address, False)
+
+    if user is None or not verify_password(
+        data.password,
+        user.password_hash,
+    ):
+        _save_login_history(
+            db,
+            user.id if user else None,
+            device_id,
+            ip_address,
+            False,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    _save_login_history(db, user.id, device_id, ip_address, True)
+
+    _save_login_history(
+        db,
+        user.id,
+        device_id,
+        ip_address,
+        True,
+    )
 
     sync_login(
-    user.id,
-    device_id,
-    ip_address,
+        user.id,
+        device_id,
+        ip_address,
     )
 
     return {
@@ -370,6 +481,7 @@ def login_user(
             "role": user.role,
         },
     }
+
 
 def delete_user_account(db: Session, user) -> None:
     user_id = user.id

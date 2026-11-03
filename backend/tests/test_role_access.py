@@ -7,6 +7,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.repositories import user_repository
+from app.services import auth_service, device_trust_service
+from app.services import auth_service, device_trust_service
 from app.services.auth_service import hash_password
 from app.models.device_model import Device
 from app.models.event_model import Event
@@ -65,19 +67,24 @@ def create_user(db, username: str, password: str = "password1234", role: str = "
     user = user_repository.create_user(db, username, hash_password(password))
     if role != "USER":
         user_repository.update_role(db, user, role)
+    device_trust_service.record_device_use(db, user.id, f"{username}-device")
     db.commit()
     db.refresh(user)
     return user
 
 
-def login(client: TestClient, username: str, password: str = "password1234"):
+def login(
+    client: TestClient,
+    username: str,
+    password: str = "password1234",
+    device_id: str | None = None,
+):
     response = client.post(
         "/api/auth/login",
         json={
             "username": username,
             "password": password,
-            "device_id": "role-access-test-device",
-            "location": "Seoul",
+            "device_id": device_id or f"{username}-device",
         },
     )
 
@@ -142,7 +149,8 @@ def test_register_then_login_round_trip(client, db):
     assert registered_user is not None
     assert registered_user.role == "USER"
 
-    login_response = login(client, "new_user")
+    login_response = login(client, "new_user", device_id="test-device")
+    login_response = login(client, "new_user", device_id="test-device")
 
     assert login_response.status_code == 200
     assert login_response.json()["user"]["role"] == "USER"
@@ -320,4 +328,4 @@ def test_admin_can_get_event_detail(client, db):
         "score_type": "IDENTITY",
         "score_contribution": 25,
         }
-    ]  
+    ]
