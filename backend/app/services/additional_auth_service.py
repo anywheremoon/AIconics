@@ -141,13 +141,6 @@ def issue_code(db: Session, user_session):
                 headers={"Retry-After": str(math.ceil(remaining))},
             )
 
-    # 실제 발송 기능이 없는 상태에서 발급 성공으로 응답하지 않는다.
-    if not expose_code_in_response():
-        raise HTTPException(
-            status_code=503,
-            detail="Verification delivery is not configured",
-        )
-
     code = f"{secrets.randbelow(1_000_000):06d}"
 
     user_session.verification_code_hash = _hash_code(

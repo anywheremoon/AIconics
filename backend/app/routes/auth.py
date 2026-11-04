@@ -22,6 +22,7 @@ from app.services import (
     additional_auth_service,
     auth_service,
     device_trust_service,
+    email_service,
     session_service,
     user_profile_service,
 )
@@ -193,6 +194,39 @@ def request_verification(
         code, expires_in = additional_auth_service.issue_code(
             db, user_session
         )
+        user = user_repository.find_by_id(db, user_session.user_id)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authenticated user no longer exists",
+            )
+
+        delivery_destination = None
+        if user.email:
+            delivery_destination = email_service.mask_email(user.email)
+
+        if not additional_auth_service.expose_code_in_response():
+            if not user.email:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This account does not have a verification email",
+                )
+            try:
+                email_service.send_verification_code(
+                    user.email,
+                    code,
+                    expires_in,
+                )
+            except email_service.EmailConfigurationError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Verification email is not configured",
+                ) from error
+            except email_service.EmailDeliveryError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Could not send the verification email",
+                ) from error
         db.commit()
     except Exception:
         db.rollback()
@@ -204,6 +238,7 @@ def request_verification(
         "retry_after_seconds": (
             additional_auth_service.VERIFICATION_REQUEST_COOLDOWN_SECONDS
         ),
+        "delivery_destination": delivery_destination,
         "verification_code": (
             code
             if additional_auth_service.expose_code_in_response()

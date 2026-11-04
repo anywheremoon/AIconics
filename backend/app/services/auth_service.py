@@ -379,11 +379,18 @@ def register_user(db: Session, data, ip_address: str | None = None):
             detail="Username already exists",
         )
 
+    if user_repository.email_exists(db, data.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already exists",
+        )
+
     try:
         user = user_repository.create_user(
             db,
             data.username,
             hash_password(data.password),
+            data.email,
         )
 
         account = create_virtual_account(db, user.id)
@@ -408,7 +415,7 @@ def register_user(db: Session, data, ip_address: str | None = None):
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username already exists",
+            detail="Username or email already exists",
         ) from error
 
     except Exception:

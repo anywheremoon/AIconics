@@ -138,6 +138,7 @@ def test_register_then_login_round_trip(client, db):
         "/api/auth/register",
         json={
             "username": "new_user",
+            "email": "new_user@example.com",
             "password": "password1234",
             "device_id": "test-device",
             "location": "Seoul",

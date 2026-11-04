@@ -530,15 +530,14 @@ export async function getLoginGuidance(
     );
   }
 
-  const query = new URLSearchParams({
-    session_id: sessionId,
-  });
-
   const result = await request(
-    `/api/auth/guidance?${query.toString()}`,
+    "/api/auth/guidance",
     {
-      method: "GET",
+      method: "POST",
       headers: verificationHeaders(verificationToken),
+      body: JSON.stringify({
+        session_id: sessionId,
+      }),
       signal,
     }
   );

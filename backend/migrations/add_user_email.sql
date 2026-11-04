@@ -1,0 +1,6 @@
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS email VARCHAR(254);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_users_email
+    ON users (LOWER(email))
+    WHERE email IS NOT NULL;

@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.models.user_session_model import UserSession
 from app.repositories import device_repository, user_repository
-from app.services import auth_service
+from app.services import auth_service, email_service
 from main import app
 
 
@@ -65,7 +65,10 @@ def client():
 
 def create_user(db, username: str):
     user = user_repository.create_user(
-        db, username, auth_service.hash_password("password1234")
+        db,
+        username,
+        auth_service.hash_password("password1234"),
+        f"{username}@example.com",
     )
     db.commit()
     db.refresh(user)
@@ -144,6 +147,75 @@ def test_new_device_requires_verification_and_completes_same_session(
         },
     )
     assert protected.status_code == 200
+
+
+def test_verification_code_is_sent_to_registered_email(
+    client, db, monkeypatch
+):
+    user = create_user(db, "email-verification-user")
+    login_body = login(client, user.username, "email-device").json()
+    sent = {}
+
+    def capture_email(recipient, code, expires_in_seconds):
+        sent.update(
+            recipient=recipient,
+            code=code,
+            expires_in_seconds=expires_in_seconds,
+        )
+
+    monkeypatch.setenv("VERIFICATION_EXPOSE_CODE", "false")
+    monkeypatch.setattr(
+        email_service,
+        "send_verification_code",
+        capture_email,
+    )
+
+    issued = client.post(
+        "/api/auth/verification/request",
+        json={"session_id": login_body["session_id"]},
+        headers={
+            "Authorization": f"Bearer {login_body['verification_token']}"
+        },
+    )
+
+    assert issued.status_code == 200
+    body = issued.json()
+    assert body["verification_code"] is None
+    assert body["delivery_destination"] == "em*********************@example.com"
+    assert sent["recipient"] == user.email
+    assert len(sent["code"]) == 6
+    assert sent["expires_in_seconds"] == 300
+
+
+def test_email_delivery_failure_does_not_store_code(
+    client, db, monkeypatch
+):
+    user = create_user(db, "email-failure-user")
+    login_body = login(client, user.username, "email-failure-device").json()
+
+    def fail_delivery(*_args):
+        raise email_service.EmailDeliveryError("SMTP unavailable")
+
+    monkeypatch.setenv("VERIFICATION_EXPOSE_CODE", "false")
+    monkeypatch.setattr(
+        email_service,
+        "send_verification_code",
+        fail_delivery,
+    )
+
+    response = client.post(
+        "/api/auth/verification/request",
+        json={"session_id": login_body["session_id"]},
+        headers={
+            "Authorization": f"Bearer {login_body['verification_token']}"
+        },
+    )
+
+    assert response.status_code == 503
+    db.expire_all()
+    user_session = db.get(UserSession, login_body["session_id"])
+    assert user_session.verification_code_hash is None
+    assert user_session.verification_requested_at is None
 
 
 def test_trusted_device_authenticates_immediately(client, db):

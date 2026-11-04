@@ -6,6 +6,9 @@ colorama==0.4.6
 eth-account==0.14.0
 fastapi==0.138.2
 greenlet==3.5.3
+google-api-python-client>=2.0,<3.0
+google-auth>=2.0,<3.0
+google-auth-oauthlib>=1.0,<2.0
 h11==0.16.0
 idna==3.18
 psycopg2-binary==2.9.12

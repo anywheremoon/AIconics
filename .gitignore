@@ -8,6 +8,8 @@ __pycache__/
 # Environment variables
 .env
 backend/.env
+backend/gmail-oauth-client.json
+backend/gmail-oauth-token.json
 
 # VS Code
 .vscode/
