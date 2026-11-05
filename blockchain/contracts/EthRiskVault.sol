@@ -245,4 +245,15 @@ contract EthRiskVault is Ownable, ReentrancyGuard, EIP712 {
 
         emit TransferCancelled(requestId, refundAmount);
     }
+        function getTransfer(bytes32 requestId)
+        external
+        view
+        returns (EthVaultTypes.TransferRequest memory)
+    {
+        require(
+            transfers[requestId].sender != address(0),
+            "Request not found"
+        );
+        return transfers[requestId];
+    }
 }

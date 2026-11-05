@@ -371,6 +371,97 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "requestId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getTransfer",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "sender",
+            "type": "address"
+          },
+          {
+            "internalType": "address payable",
+            "name": "recipient",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "enum EthVaultTypes.RiskLevel",
+            "name": "riskLevel",
+            "type": "uint8"
+          },
+          {
+            "internalType": "enum EthVaultTypes.TransferStatus",
+            "name": "status",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "createdAt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "riskScore",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "requiresAuth",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "requiresAdminApproval",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "authCompleted",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "adminApproved",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "timelockUntil",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "deadline",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "analysisHash",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct EthVaultTypes.TransferRequest",
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "nextRequestId",
     "outputs": [

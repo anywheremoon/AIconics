@@ -34,8 +34,6 @@ class EthVaultAnalyzeRequest(BaseModel):
     @field_validator("request_id")
     @classmethod
     def normalize_request_id(cls, value: str) -> str:
-        if int(value, 16) == 0:
-            raise ValueError("request_id must not be zero")
         return value.lower()
 
     @field_validator(
