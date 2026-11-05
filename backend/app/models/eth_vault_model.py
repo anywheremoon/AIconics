@@ -9,6 +9,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.sql import func
 
@@ -19,6 +20,13 @@ class EthVaultTransfer(Base):
     __tablename__ = "eth_vault_transfers"
 
     __table_args__ = (
+        UniqueConstraint(
+            "deployment_id",
+            "chain_id",
+            "verifying_contract",
+            "request_id",
+            name="uq_eth_vault_deployment_request",
+        ),
         CheckConstraint("amount_wei > 0", name="ck_eth_vault_amount_positive"),
         CheckConstraint(
             "risk_score IS NULL OR (risk_score >= 0 AND risk_score <= 100)",
@@ -32,7 +40,8 @@ class EthVaultTransfer(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    request_id = Column(String(66), nullable=False, unique=True, index=True)
+    deployment_id = Column(String(36), nullable=False, index=True)
+    request_id = Column(String(66), nullable=False, index=True)
     user_id = Column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -65,6 +74,24 @@ class EthVaultTransfer(Base):
     nonce = Column(String(66), nullable=True, unique=True)
     signature = Column(Text, nullable=True)
     blockchain_tx_hash = Column(String(66), nullable=True)
+        # 거래별 이메일 인증. 로그인 인증과 분리한다.
+    verification_session_id = Column(String(36), nullable=True)
+    verification_code_hash = Column(String(64), nullable=True)
+    verification_requested_at = Column(
+        DateTime(timezone=True), nullable=True
+    )
+    verification_expires_at = Column(
+        DateTime(timezone=True), nullable=True
+    )
+    verification_attempts = Column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    verification_confirmed_at = Column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # 이메일 인증과 온체인 인증 반영을 구분한다.
+    auth_tx_hash = Column(String(66), nullable=True)
 
     created_at = Column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
