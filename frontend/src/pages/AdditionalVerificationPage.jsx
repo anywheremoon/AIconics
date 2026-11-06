@@ -60,7 +60,9 @@ function AdditionalVerificationPage() {
       setMessage(
         typeof result?.message === "string"
           ? result.message
-          : "인증번호를 요청했습니다. 등록된 인증 수단을 확인해주세요."
+          : result?.delivery_destination
+            ? `${result.delivery_destination}로 인증번호를 보냈습니다.`
+            : "등록된 이메일로 인증번호를 보냈습니다."
       );
     } catch (err) {
       setError(

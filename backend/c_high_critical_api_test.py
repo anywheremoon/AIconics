@@ -32,6 +32,7 @@ def create_user(label):
         f"{BASE}/api/auth/register",
         json={
             "username": username,
+            "email": f"{username}@example.com",
             "password": PASSWORD,
             "device_id": device_id,
             "location": "Seoul",

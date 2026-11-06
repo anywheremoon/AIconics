@@ -39,16 +39,7 @@ export function amountToUnits(value, decimals) {
 }
 
 async function loadEthers() {
-  // Mock 모드에서는 이 함수를 호출하지 않습니다.
-  const packageName = "ethers";
-
-  try {
-    return await import(/* @vite-ignore */ packageName);
-  } catch {
-    throw new Error(
-      "실제 지갑 연동에 필요한 ethers 설정을 확인해 주세요."
-    );
-  }
+  return import("ethers");
 }
 
 export async function getTokenInfo(tokenAddress) {

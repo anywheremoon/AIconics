@@ -108,10 +108,7 @@ def submit_transfer_risk(
         raise HTTPException(
             status_code=409, detail="Risk result was already submitted"
         )
-    if transfer.status == "REJECTED":
-        raise HTTPException(
-            status_code=409, detail="A rejected risk result cannot be submitted"
-        )
+    
     deadline = transfer.signature_deadline
     if deadline is None:
         raise HTTPException(status_code=409, detail="Risk signature is unavailable")
@@ -160,3 +157,8 @@ def submit_transfer_risk(
         "status": "RISK_SUBMITTED",
     }
 
+from app.routes.eth_vault_verification import (
+    router as vault_verification_router,
+)
+
+router.include_router(vault_verification_router)

@@ -9,6 +9,7 @@ function RegisterPage() {
 
   const [form, setForm] = useState({
     username: "",
+    email: "",
     password: "",
     passwordConfirm: "",
     deviceId: "",
@@ -33,6 +34,7 @@ function RegisterPage() {
 
     if (
       !form.username.trim() ||
+      !form.email.trim() ||
       !form.password ||
       !form.passwordConfirm ||
       !form.deviceId.trim() ||
@@ -52,6 +54,7 @@ function RegisterPage() {
     try {
       await register({
         username: form.username.trim(),
+        email: form.email.trim(),
         password: form.password,
         device_id: form.deviceId.trim(),
         location: form.location.trim(),
@@ -99,6 +102,20 @@ function RegisterPage() {
               value={form.password}
               onChange={handleChange}
               placeholder="비밀번호를 입력하세요"
+              disabled={loading}
+            />
+          </div>
+
+          <div className="auth-field">
+            <label htmlFor="email">이메일</label>
+            <input
+              id="email"
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="인증번호를 받을 이메일"
+              autoComplete="email"
               disabled={loading}
             />
           </div>

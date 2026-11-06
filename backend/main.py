@@ -6,6 +6,8 @@ import uvicorn
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from starlette import status
+from app.routes import risk_transfer
+
 
 # DB 관련 import
 from app.database import Base, engine
@@ -93,6 +95,7 @@ app.include_router(eth_vault.router)
 app.include_router(dashboard.router)
 app.include_router(graph.router)
 app.include_router(security_guidance.router)
+app.include_router(risk_transfer.router)
 
 # 관리자 블록체인 기록 조회
 app.include_router(integrity.router)

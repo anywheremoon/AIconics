@@ -11,9 +11,15 @@ def find_by_id(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def create_user(db: Session, username: str, password_hash: str) -> User:
+def create_user(
+    db: Session,
+    username: str,
+    password_hash: str,
+    email: str | None = None,
+) -> User:
     user = User(
         username=username,
+        email=email.lower() if email else None,
         password_hash=password_hash,
         role="USER",
     )
@@ -35,6 +41,15 @@ def update_role(db: Session, user: User, role: str) -> User:
 
 def username_exists(db: Session, username: str) -> bool:
     return db.query(User.id).filter(User.username == username).first() is not None
+
+
+def email_exists(db: Session, email: str) -> bool:
+    return (
+        db.query(User.id)
+        .filter(User.email == email.lower())
+        .first()
+        is not None
+    )
 
 def delete_user(db: Session, user: User) -> None:
     db.delete(user)

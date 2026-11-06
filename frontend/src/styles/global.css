@@ -1081,3 +1081,144 @@ select {
     font-size: 30px;
   }
 }
+
+/* ETH Risk Vault */
+.ev-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  color: #172033;
+}
+
+.ev-page button,
+.ev-page input,
+.ev-page select {
+  font: inherit;
+}
+
+.ev-card {
+  margin: 16px 0;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #dfe5ee;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgb(15 23 42 / 4%);
+}
+
+.ev-form {
+  display: grid;
+  gap: 16px;
+}
+
+.ev-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.ev-form input,
+.ev-form select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  color: #172033;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.ev-page button {
+  padding: 10px 15px;
+  color: #fff;
+  background: #4f46e5;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ev-page button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ev-page button.ev-danger {
+  background: #b91c1c;
+}
+
+.ev-page button:focus-visible,
+.ev-page input:focus-visible,
+.ev-page select:focus-visible {
+  outline: 3px solid #818cf8;
+  outline-offset: 3px;
+}
+
+.ev-heading,
+.ev-status,
+.ev-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ev-heading {
+  justify-content: space-between;
+}
+
+.ev-badge {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ev-low {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.ev-medium {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
+.ev-high {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.ev-critical {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.ev-timeline {
+  display: grid;
+  gap: 10px;
+  padding-left: 22px;
+  margin: 20px 0;
+  line-height: 1.6;
+}
+
+.ev-notice,
+.ev-error {
+  padding: 14px 16px;
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.ev-notice {
+  color: #3730a3;
+  background: #eef2ff;
+}
+
+.ev-error {
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.ev-id {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}

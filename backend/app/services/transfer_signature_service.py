@@ -24,7 +24,7 @@ RISK_TRANSFER_FIELDS = [
     {"name": "sender", "type": "address"},
     {"name": "recipient", "type": "address"},
     {"name": "amount", "type": "uint256"},
-    {"name": "riskScore", "type": "uint8"},
+    {"name": "riskScore", "type": "uint256"},
     {"name": "riskLevel", "type": "uint8"},
     {"name": "requestId", "type": "bytes32"},
     {"name": "deadline", "type": "uint256"},
