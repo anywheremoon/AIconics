@@ -71,6 +71,8 @@ def assess_final_risk(
     transaction_reasons=None,
     graph_score=None,
     graph_reasons=None,
+    transaction_maximum=100.0,
+    graph_maximum=100.0,
 ) -> FinalRiskResult:
     """각 영역의 점수와 사유를 최종 위험 평가 결과로 묶는다."""
 
@@ -107,6 +109,8 @@ def assess_final_risk(
         identity_score=effective_scores["IDENTITY"],
         transaction_score=effective_scores["TRANSACTION"],
         graph_score=effective_scores.get("GRAPH"),
+        transaction_maximum=transaction_maximum,
+        graph_maximum=graph_maximum,
     )
 
     decision = decide_risk(combined["final_risk_score"])

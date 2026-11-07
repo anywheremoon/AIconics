@@ -6,7 +6,7 @@ import threading
 # Backend API 설정
 # ==========================================
 
-BACKEND_URL = "http://172.30.1.61:8000"
+BACKEND_URL = "http://172.19.70.234:8000"
 API_URL = f"{BACKEND_URL}/api/events"
 
 SEND_INTERVAL = 30

@@ -127,6 +127,8 @@ def _risk_result(db: Session, *, user_id: int, data):
         identity_reasons=behavior_identity["identity_reasons"],
         transaction_reasons=transaction["reason_details"],
         graph_reasons=graph["reason_details"],
+        transaction_maximum=70.0,
+        graph_maximum=45.0,
     )
 
 

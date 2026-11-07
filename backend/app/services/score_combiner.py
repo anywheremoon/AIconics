@@ -67,6 +67,8 @@ def calculate_final_risk(
     identity_score,
     transaction_score,
     graph_score=None,
+    transaction_maximum=100.0,
+    graph_maximum=100.0,
 ) -> dict:
     """
     거래 단계의 최종 위험 점수를 계산한다.
@@ -122,11 +124,30 @@ def calculate_final_risk(
             "graph": GRAPH_WEIGHT,
         }
 
+        transaction_normalized = normalize_rule_score(
+        transaction,
+        name="transaction_score",
+        maximum=transaction_maximum,
+    )
+    graph_normalized = (
+        normalize_rule_score(
+            graph,
+            name="graph_score",
+            maximum=graph_maximum,
+        )
+        if graph is not None
+        else None
+    )
+    
     contributions = {
         "behavior": behavior_normalized * applied_weights["behavior"],
         "identity": identity_normalized * applied_weights["identity"],
-        "transaction": transaction * applied_weights["transaction"],
-        "graph": (graph or 0.0) * applied_weights["graph"],
+        "transaction": (
+            transaction_normalized * applied_weights["transaction"]
+        ),
+        "graph": (
+            (graph_normalized or 0.0) * applied_weights["graph"]
+        ),
     }
 
     final_score = max(
