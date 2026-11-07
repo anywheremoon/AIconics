@@ -29,7 +29,7 @@ library EthVaultPolicy {
                 "Invalid HIGH policy"
             );
             require(
-                timelockUntil >= block.timestamp,
+                timelockUntil == 0,
                 "Invalid HIGH timelock"
             );
         } else {

@@ -20,6 +20,7 @@ from app.services.transfer_behavior_service import get_latest_behavior_identity
 SIGNATURE_TTL_SECONDS = 300
 HIGH_VALUE_WEI = 10**18
 VERY_HIGH_VALUE_WEI = 10 * 10**18
+
 POLICIES = {
     "LOW": {
         "status": "READY",
@@ -37,7 +38,7 @@ POLICIES = {
         "status": "ADMIN_REVIEW",
         "requires_auth": True,
         "requires_admin_approval": True,
-        "timelock_seconds": 3600,
+        "timelock_seconds": 0,
     },
     "CRITICAL": {
         "status": "REJECTED",
@@ -48,11 +49,19 @@ POLICIES = {
 }
 
 
-def policy_for_risk(*, risk_score: int, risk_level: str, decision: str) -> dict:
+def policy_for_risk(
+    *,
+    risk_score: int,
+    risk_level: str,
+    decision: str,
+) -> dict:
     try:
         policy = POLICIES[risk_level]
     except KeyError as error:
-        raise ValueError(f"Unsupported ETH Vault risk level: {risk_level}") from error
+        raise ValueError(
+            f"Unsupported ETH Vault risk level: {risk_level}"
+        ) from error
+
     return {
         "risk_score": int(risk_score),
         "risk_level": risk_level,
@@ -61,7 +70,12 @@ def policy_for_risk(*, risk_score: int, risk_level: str, decision: str) -> dict:
     }
 
 
-def _transaction_risk(db: Session, *, user_id: int, data) -> dict:
+def _transaction_risk(
+    db: Session,
+    *,
+    user_id: int,
+    data,
+) -> dict:
     amount = int(data.amount_wei)
     previous_recipient = (
         db.query(eth_vault_repository.EthVaultTransfer.id)
@@ -72,6 +86,7 @@ def _transaction_risk(db: Session, *, user_id: int, data) -> dict:
         )
         .first()
     )
+
     score = 0
     reasons = []
 
@@ -85,6 +100,7 @@ def _transaction_risk(db: Session, *, user_id: int, data) -> dict:
                 "score_contribution": 15,
             }
         )
+
     if amount >= VERY_HIGH_VALUE_WEI:
         score += 55
         reasons.append(
@@ -105,18 +121,32 @@ def _transaction_risk(db: Session, *, user_id: int, data) -> dict:
                 "score_contribution": 30,
             }
         )
-    return {"transaction_score": min(score, 100), "reason_details": reasons}
+
+    return {
+        "transaction_score": min(score, 100),
+        "reason_details": reasons,
+    }
 
 
 def _risk_result(db: Session, *, user_id: int, data):
     behavior_identity = get_latest_behavior_identity(
-        db, user_id=user_id, session_id=str(data.session_id)
+        db,
+        user_id=user_id,
+        session_id=str(data.session_id),
     )
-    transaction = _transaction_risk(db, user_id=user_id, data=data)
+    transaction = _transaction_risk(
+        db,
+        user_id=user_id,
+        data=data,
+    )
+
     try:
         graph = graph_risk_engine.analyze_graph_risk(user_id)
     except ServiceUnavailable:
-        graph = {"graph_score": None, "reason_details": []}
+        graph = {
+            "graph_score": None,
+            "reason_details": [],
+        }
 
     return assess_final_risk(
         behavior_score=behavior_identity["behavior_score"],
@@ -140,28 +170,53 @@ def analyze_transfer(
     now: datetime | None = None,
     private_key: str | None = None,
 ) -> dict:
-    analysis_time = now or datetime.now(timezone.utc)
-    if analysis_time.tzinfo is None:
-        analysis_time = analysis_time.replace(tzinfo=timezone.utc)
-
     if eth_vault_repository.find_by_request_id(db, data.request_id):
         raise eth_vault_repository.DuplicateVaultRequestError(
             "An ETH Vault transfer with this request_id already exists"
         )
 
-    result = _risk_result(db, user_id=user_id, data=data)
+    if now is None:
+        from app.services.eth_vault_blockchain_service import _connect
+
+        w3, _, _, _ = _connect()
+        latest_block = w3.eth.get_block("latest")
+        chain_time = datetime.fromtimestamp(
+            int(latest_block["timestamp"]),
+            tz=timezone.utc,
+        )
+        analysis_time = max(
+            datetime.now(timezone.utc),
+            chain_time,
+        )
+    else:
+        analysis_time = now
+        if analysis_time.tzinfo is None:
+            analysis_time = analysis_time.replace(tzinfo=timezone.utc)
+
+    result = _risk_result(
+        db,
+        user_id=user_id,
+        data=data,
+    )
     policy = policy_for_risk(
         risk_score=round(result.final_risk_score),
         risk_level=result.risk_level,
         decision=result.decision,
     )
+
     timelock_until = (
         analysis_time + timedelta(seconds=policy["timelock_seconds"])
         if policy["timelock_seconds"]
         else None
     )
-    deadline = analysis_time + timedelta(seconds=SIGNATURE_TTL_SECONDS)
-    reasons = [reason.model_dump(mode="json") for reason in result.reasons]
+    deadline = analysis_time + timedelta(
+        seconds=SIGNATURE_TTL_SECONDS
+    )
+    reasons = [
+        reason.model_dump(mode="json")
+        for reason in result.reasons
+    ]
+
     analysis_hash = build_analysis_hash(
         request_id=data.request_id,
         risk_score=policy["risk_score"],
@@ -170,6 +225,7 @@ def analyze_transfer(
         reasons=reasons,
     )
     nonce = new_nonce()
+
     signed_result = build_signed_result(
         request_id=data.request_id,
         sender_address=data.sender_address,
@@ -213,6 +269,7 @@ def analyze_transfer(
         nonce=nonce,
         signature=signature,
     )
+
     try:
         db.commit()
         db.refresh(transfer)
@@ -226,4 +283,3 @@ def analyze_transfer(
         "signed_result": signed_result,
         "signature": signature,
     }
-

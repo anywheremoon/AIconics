@@ -270,6 +270,9 @@ def complete_transfer_auth(
     except EthVaultBlockchainError:
         raise
     except Exception as error:
+        import traceback
+        traceback.print_exc()
+
         raise EthVaultBlockchainError(
-            "Failed to complete ETH Vault authentication"
+            f"Failed to submit ETH Vault risk result: {error}"
         ) from error
