@@ -10,29 +10,29 @@ import * as Contracts from "./index.js";
 
 declare module "@nomicfoundation/hardhat-ethers/types" {
   interface HardhatEthersHelpers extends HardhatEthersHelpersBase {
-  getContractFactory(name: 'AnalysisRegistry', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.AnalysisRegistry__factory>
-getContractFactory(name: 'EthRiskVault', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.EthRiskVault__factory>
+  getContractFactory(name: 'EthRiskVault', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.EthRiskVault__factory>
+getContractFactory(name: 'AnalysisRegistry', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.AnalysisRegistry__factory>
 getContractFactory(name: 'RiskTransfer', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.RiskTransfer__factory>
 getContractFactory(name: 'TestToken', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.TestToken__factory>
 getContractFactory(name: 'IEthRiskVault', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IEthRiskVault__factory>
 getContractFactory(name: 'ReentrancyAttacker', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ReentrancyAttacker__factory>
 
-  getContractAt(name: 'AnalysisRegistry', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.AnalysisRegistry>
-getContractAt(name: 'EthRiskVault', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.EthRiskVault>
+  getContractAt(name: 'EthRiskVault', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.EthRiskVault>
+getContractAt(name: 'AnalysisRegistry', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.AnalysisRegistry>
 getContractAt(name: 'RiskTransfer', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.RiskTransfer>
 getContractAt(name: 'TestToken', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.TestToken>
 getContractAt(name: 'IEthRiskVault', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IEthRiskVault>
 getContractAt(name: 'ReentrancyAttacker', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ReentrancyAttacker>
 
-  deployContract(name: 'AnalysisRegistry', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AnalysisRegistry>
-deployContract(name: 'EthRiskVault', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.EthRiskVault>
+  deployContract(name: 'EthRiskVault', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.EthRiskVault>
+deployContract(name: 'AnalysisRegistry', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AnalysisRegistry>
 deployContract(name: 'RiskTransfer', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.RiskTransfer>
 deployContract(name: 'TestToken', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TestToken>
 deployContract(name: 'IEthRiskVault', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IEthRiskVault>
 deployContract(name: 'ReentrancyAttacker', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ReentrancyAttacker>
 
-  deployContract(name: 'AnalysisRegistry', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AnalysisRegistry>
-deployContract(name: 'EthRiskVault', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.EthRiskVault>
+  deployContract(name: 'EthRiskVault', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.EthRiskVault>
+deployContract(name: 'AnalysisRegistry', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.AnalysisRegistry>
 deployContract(name: 'RiskTransfer', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.RiskTransfer>
 deployContract(name: 'TestToken', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.TestToken>
 deployContract(name: 'IEthRiskVault', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IEthRiskVault>
